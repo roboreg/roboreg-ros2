@@ -6,7 +6,7 @@ from sensor_msgs.msg import Image, JointState, PointCloud2
 from std_srvs.srv import Trigger
 
 
-class MeshregServer:
+class RoboregServer:
     SyncedDataType = Tuple[Image, JointState, PointCloud2]
 
     def __init__(self, node: Node) -> None:

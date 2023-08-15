@@ -6,7 +6,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
 
-class MeshregMixin:
+class RoboregMixin:
     @staticmethod
     def arg_sync_accuracy() -> DeclareLaunchArgument:
         return DeclareLaunchArgument(
@@ -20,11 +20,11 @@ class MeshregMixin:
         return {"sync_accuracy": LaunchConfiguration("sync_accuracy")}
 
     @staticmethod
-    def node_meshreg(**kwargs) -> Node:
+    def node_roboreg(**kwargs) -> Node:
         return Node(
-            package="ros2_meshreg",
-            executable="meshreg",
-            name="meshreg",
+            package="ros2_roboreg",
+            executable="roboreg",
+            name="roboreg",
             output="screen",
             **kwargs
         )

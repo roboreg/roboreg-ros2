@@ -2,7 +2,7 @@ import glob
 
 from setuptools import find_packages, setup
 
-package_name = "ros2_meshreg"
+package_name = "ros2_roboreg"
 
 setup(
     name=package_name,
@@ -22,7 +22,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "meshreg = scripts.meshreg_node:main",
+            "roboreg = scripts.roboreg_node:main",
         ],
     },
 )
