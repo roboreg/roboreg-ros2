@@ -22,7 +22,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "meshreg = scripts.meshreg:main",
+            "meshreg = scripts.meshreg_node:main",
         ],
     },
 )

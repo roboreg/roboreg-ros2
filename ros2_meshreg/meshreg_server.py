@@ -42,9 +42,11 @@ class MeshregServer:
         )
 
     def _create_subscriptions(self) -> None:
-        self._image_sub = Subscriber(self._node, Image, "/image")
+        self._image_sub = Subscriber(self._node, Image, "/image/rect")
         self._joint_state_sub = Subscriber(self._node, JointState, "/joint_states")
-        self._point_cloud_sub = Subscriber(self._node, PointCloud2, "/point_cloud")
+        self._point_cloud_sub = Subscriber(
+            self._node, PointCloud2, "/point_cloud/registered"
+        )
 
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [self._image_sub, self._joint_state_sub, self._point_cloud_sub],
