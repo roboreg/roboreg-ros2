@@ -68,12 +68,14 @@ class RoboregServer:
         ):
             response.success = False
             response.message = f"No data available yet. Maybe data not in sync. Synchronization accuracy: {self._sync_accuracy}."
+            self.get_logger().warn(response.message)
             return response
         self._synced_data_list.append(self._synced_data)
         response.success = True
         response.message = (
             f"Added data with time stamp: {self._synced_data[0].header.stamp}"
         )
+        self.get_logger().info(response.message)
         return response
 
     def _on_register(
