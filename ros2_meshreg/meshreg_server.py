@@ -67,7 +67,7 @@ class MeshregServer:
             or self._synced_data[1] is None
         ):
             response.success = False
-            response.message = "No data available yet."
+            response.message = f"No data available yet. Maybe data not in sync. Synchronization accuracy: {self._sync_accuracy}."
             return response
         self._synced_data_list.append(self._synced_data)
         response.success = True
