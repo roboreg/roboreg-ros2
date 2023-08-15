@@ -6,7 +6,7 @@ from ros2_roboreg import RoboregServer
 
 def main() -> None:
     rclpy.init()
-    node = Node("roboreg_server")
+    node = Node("roboreg")
     server = RoboregServer(node)
     rclpy.spin(node)
     rclpy.shutdown()

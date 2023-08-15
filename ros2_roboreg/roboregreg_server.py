@@ -35,10 +35,10 @@ class RoboregServer:
 
     def _create_services(self) -> None:
         self.collect_service = self._node.create_service(
-            Trigger, "collect", self._on_collect
+            Trigger, "~/collect", self._on_collect
         )
         self.register_service = self._node.create_service(
-            Trigger, "register", self._on_register
+            Trigger, "~/register", self._on_register
         )
 
     def _create_subscriptions(self) -> None:
