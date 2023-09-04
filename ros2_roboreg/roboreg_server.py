@@ -9,7 +9,9 @@ from std_srvs.srv import Trigger
 class RoboregServer(Node):
     SyncedDataType = Tuple[Image, JointState, PointCloud2]
 
-    def __init__(self) -> None:
+    def __init__(self, node_name: str="roboreg") -> None:
+        super().__init__(node_name)
+
         # data collection
         self._synced_data: self.SyncedDataType = (None, None, None)
         self._synced_data_list: List[self.SyncedDataType] = []
