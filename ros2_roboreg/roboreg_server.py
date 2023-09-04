@@ -28,7 +28,7 @@ class RoboregServer(Node):
 
     def _delcare_parameters(self) -> None:
         if not self.has_parameter("sync_accuracy"):
-            self.declare_parameter("sync_accuracy", 0.1)
+            self.declare_parameter("sync_accuracy", 0.01)
 
     def _get_parameters(self) -> None:
         self._sync_accuracy = float(self.get_parameter("sync_accuracy").value)
