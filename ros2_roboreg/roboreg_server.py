@@ -6,12 +6,10 @@ from sensor_msgs.msg import Image, JointState, PointCloud2
 from std_srvs.srv import Trigger
 
 
-class RoboregServer:
+class RoboregServer(Node):
     SyncedDataType = Tuple[Image, JointState, PointCloud2]
 
-    def __init__(self, node: Node) -> None:
-        self._node: Node = node
-
+    def __init__(self) -> None:
         # data collection
         self._synced_data: self.SyncedDataType = (None, None, None)
         self._synced_data_list: List[self.SyncedDataType] = []
@@ -27,26 +25,24 @@ class RoboregServer:
         self._create_services()
 
     def _delcare_parameters(self) -> None:
-        if not self._node.has_parameter("sync_accuracy"):
-            self._node.declare_parameter("sync_accuracy", 0.1)
+        if not self.has_parameter("sync_accuracy"):
+            self.declare_parameter("sync_accuracy", 0.1)
 
     def _get_parameters(self) -> None:
-        self._sync_accuracy = float(self._node.get_parameter("sync_accuracy").value)
+        self._sync_accuracy = float(self.get_parameter("sync_accuracy").value)
 
     def _create_services(self) -> None:
-        self.collect_service = self._node.create_service(
+        self.collect_service = self.create_service(
             Trigger, "~/collect", self._on_collect
         )
-        self.register_service = self._node.create_service(
+        self.register_service = self.create_service(
             Trigger, "~/register", self._on_register
         )
 
     def _create_subscriptions(self) -> None:
-        self._image_sub = Subscriber(self._node, Image, "/image/rect")
-        self._joint_state_sub = Subscriber(self._node, JointState, "/joint_states")
-        self._point_cloud_sub = Subscriber(
-            self._node, PointCloud2, "/point_cloud/registered"
-        )
+        self._image_sub = Subscriber(self, Image, "/image/rect")
+        self._joint_state_sub = Subscriber(self, JointState, "/joint_states")
+        self._point_cloud_sub = Subscriber(self, PointCloud2, "/point_cloud/registered")
 
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [self._image_sub, self._joint_state_sub, self._point_cloud_sub],
