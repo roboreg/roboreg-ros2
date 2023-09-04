@@ -1,2 +1,2 @@
 from .roboreg_mixin import RoboregMixin
-from .roboregreg_server import RoboregServer
+from .roboreg_server import RoboregServer
