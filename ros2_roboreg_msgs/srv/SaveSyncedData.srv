@@ -1,0 +1,5 @@
+string path
+bool mkdir
+---
+bool success
+string message
