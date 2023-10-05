@@ -11,7 +11,7 @@ class RoboregMixin:
     def arg_sync_accuracy() -> DeclareLaunchArgument:
         return DeclareLaunchArgument(
             "sync_accuracy",
-            default_value="0.1",
+            default_value="1.0",
             description="Allowed synchronization accuracy for images, point clouds, joint states in seconds.",
         )
 

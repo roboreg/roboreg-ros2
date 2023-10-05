@@ -5,6 +5,7 @@ from typing import List, Tuple
 import cv2
 import cv_bridge
 import numpy as np
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.node import Node
 from sensor_msgs.msg import Image, JointState, PointCloud2
@@ -41,14 +42,20 @@ class RoboregServer(Node):
         self._sync_accuracy = float(self.get_parameter("sync_accuracy").value)
 
     def _create_services(self) -> None:
+        # callback group
+        callback_group = MutuallyExclusiveCallbackGroup()
+
         self.collect_service = self.create_service(
-            Trigger, "~/collect", self._on_collect
+            Trigger, "~/collect", self._on_collect, callback_group=callback_group
         )
         self.register_service = self.create_service(
             Trigger, "~/register", self._on_register
         )
         self.save_synced_data_service = self.create_service(
-            SaveSyncedData, "~/save_synced_data", self._on_save_synced_data
+            SaveSyncedData,
+            "~/save_synced_data",
+            self._on_save_synced_data,
+            callback_group=callback_group,
         )
 
     def _create_subscriptions(self) -> None:
@@ -72,7 +79,7 @@ class RoboregServer(Node):
         if (
             self._synced_data[0] is None
             or self._synced_data[1] is None
-            or self._synced_data[1] is None
+            or self._synced_data[2] is None
         ):
             response.success = False
             response.message = f"No data available yet. Maybe data not in sync. Synchronization accuracy: {self._sync_accuracy}."
@@ -84,6 +91,7 @@ class RoboregServer(Node):
             f"Added data with time stamp: {self._synced_data[0].header.stamp}"
         )
         self.get_logger().info(response.message)
+        self._synced_data = (None, None, None)
         return response
 
     def _on_register(
