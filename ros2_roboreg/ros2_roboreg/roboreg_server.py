@@ -1,28 +1,54 @@
+import copy
 import os
 import pathlib
+from dataclasses import dataclass
 from typing import List, Tuple
 
 import cv2
 import cv_bridge
 import numpy as np
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from message_filters import ApproximateTimeSynchronizer, Subscriber
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
-from sensor_msgs.msg import Image, JointState, PointCloud2
+from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from std_srvs.srv import Trigger
 
 from ros2_roboreg_msgs.srv import SaveSyncedData
 
 
-class RoboregServer(Node):
-    SyncedDataType = Tuple[Image, JointState, PointCloud2]
+@dataclass
+class SyncedData:
+    left_image: Image
+    right_image: Image
+    left_camera_info: CameraInfo
+    right_camera_info: CameraInfo
+    joint_state: JointState
+    point_cloud: PointCloud2
 
+    def __init__(self) -> None:
+        self.left_image = None
+        self.right_image = None
+        self.left_camera_info = None
+        self.right_camera_info = None
+        self.joint_state = None
+        self.point_cloud = None
+
+    def clear(self) -> None:
+        self.left_image = None
+        self.right_image = None
+        self.left_camera_info = None
+        self.right_camera_info = None
+        self.joint_state = None
+        self.point_cloud = None
+
+
+class RoboregServer(Node):
     def __init__(self, node_name: str = "roboreg") -> None:
         super().__init__(node_name)
 
         # data collection
-        self._synced_data: self.SyncedDataType = (None, None, None)
-        self._synced_data_list: List[self.SyncedDataType] = []
+        self._synced_data = SyncedData()
+        self._synced_data_list: List[SyncedData] = []
 
         # parameters
         self._delcare_parameters()
@@ -59,39 +85,67 @@ class RoboregServer(Node):
         )
 
     def _create_subscriptions(self) -> None:
-        self._image_sub = Subscriber(self, Image, "/image/rect")
-        self._joint_state_sub = Subscriber(self, JointState, "/joint_states")
-        self._point_cloud_sub = Subscriber(self, PointCloud2, "/point_cloud/registered")
+        self._left_image_sub = Subscriber(self, Image, "left/image_rect_color")
+        self._right_image_sub = Subscriber(self, Image, "right/image_rect_color")
+        self._left_camera_info_sub = Subscriber(self, CameraInfo, "left/camera_info")
+        self._right_camera_info_sub = Subscriber(self, CameraInfo, "right/camera_info")
+        self._joint_state_sub = Subscriber(self, JointState, "/lbr/joint_states")
+        self._point_cloud_sub = Subscriber(
+            self, PointCloud2, "point_cloud/cloud_registered"
+        )
 
         self._approximate_time_sync = ApproximateTimeSynchronizer(
-            [self._image_sub, self._joint_state_sub, self._point_cloud_sub],
+            [
+                self._left_image_sub,
+                self._right_image_sub,
+                self._left_camera_info_sub,
+                self._right_camera_info_sub,
+                self._joint_state_sub,
+                self._point_cloud_sub,
+            ],
             queue_size=1,
             slop=self._sync_accuracy,
         )
         self._approximate_time_sync.registerCallback(self._on_sync)
 
-    def _on_sync(self, image: Image, joint_state: JointState, point_cloud: PointCloud2):
-        self._synced_data = (image, joint_state, point_cloud)
+    def _on_sync(
+        self,
+        left_image: Image,
+        right_image: Image,
+        left_camera_info: CameraInfo,
+        right_camera_info: CameraInfo,
+        joint_state: JointState,
+        point_cloud: PointCloud2,
+    ):
+        self._synced_data.left_image = left_image
+        self._synced_data.right_image = right_image
+        self._synced_data.left_camera_info = left_camera_info
+        self._synced_data.right_camera_info = right_camera_info
+        self._synced_data.joint_state = joint_state
+        self._synced_data.point_cloud = point_cloud
 
     def _on_collect(
         self, request: Trigger.Request, response: Trigger.Response
     ) -> Trigger.Response:
         if (
-            self._synced_data[0] is None
-            or self._synced_data[1] is None
-            or self._synced_data[2] is None
+            self._synced_data.right_image is None
+            or self._synced_data.left_image is None
+            or self._synced_data.left_camera_info is None
+            or self._synced_data.right_camera_info is None
+            or self._synced_data.joint_state is None
+            or self._synced_data.point_cloud is None
         ):
             response.success = False
             response.message = f"No data available yet. Maybe data not in sync. Synchronization accuracy: {self._sync_accuracy}."
             self.get_logger().warn(response.message)
             return response
-        self._synced_data_list.append(self._synced_data)
+        self._synced_data_list.append(copy.deepcopy(self._synced_data))
         response.success = True
         response.message = (
-            f"Added data with time stamp: {self._synced_data[0].header.stamp}"
+            f"Added data with time stamp: {self._synced_data.joint_state.header.stamp}"
         )
         self.get_logger().info(response.message)
-        self._synced_data = (None, None, None)
+        self._synced_data.clear()
         return response
 
     def _on_register(
@@ -164,22 +218,72 @@ class RoboregServer(Node):
 
                 return np.stack([x, y, z], axis=-1), rgba
 
-            for img, joint_state, point_cloud in self._synced_data_list:
+            def write_camera_info_to_yaml(camera_info_msg: CameraInfo, path: str):
+                import yaml
+
+                camera_info = {
+                    "width": camera_info_msg.width,
+                    "height": camera_info_msg.height,
+                    "frame_id": camera_info_msg.header.frame_id,
+                    "camera_matrix": {
+                        "rows": 3,
+                        "cols": 3,
+                        "data": camera_info_msg.k.tolist(),
+                    },
+                    "distortion_model": camera_info_msg.distortion_model,
+                    "distortion_coefficients": {
+                        "rows": 1,
+                        "cols": 5,
+                        "data": camera_info_msg.d.tolist(),
+                    },
+                    "rectification_matrix": {
+                        "rows": 3,
+                        "cols": 3,
+                        "data": camera_info_msg.r.tolist(),
+                    },
+                    "projection_matrix": {
+                        "rows": 3,
+                        "cols": 4,
+                        "data": camera_info_msg.p.tolist(),
+                    },
+                }
+
+                with open(path, "w") as f:
+                    yaml.dump(camera_info, f)
+
+            # save camera info
+            write_camera_info_to_yaml(
+                self._synced_data_list[0].left_camera_info,
+                os.path.join(path, "left_camera_info.yaml"),
+            )
+            write_camera_info_to_yaml(
+                self._synced_data_list[0].right_camera_info,
+                os.path.join(path, "right_camera_info.yaml"),
+            )
+
+            for synced_data in self._synced_data_list:
                 # convert to numpy
-                img_np = bridge.imgmsg_to_cv2(img, desired_encoding="passthrough")
-                joint_position = joint_state.position
-                name = joint_state.name
+                left_img_np = bridge.imgmsg_to_cv2(
+                    synced_data.left_image, desired_encoding="passthrough"
+                )
+                right_img_np = bridge.imgmsg_to_cv2(
+                    synced_data.right_image, desired_encoding="passthrough"
+                )
+                joint_position = synced_data.joint_state.position
+                name = synced_data.joint_state.name
                 joint_position = [x for _, x in sorted(zip(name, joint_position))]
                 joint_position_np = np.array(joint_position)
-                xyz_np, rgba_np = point_cloud_to_numpy(point_cloud)
+                xyz_np, rgba_np = point_cloud_to_numpy(synced_data.point_cloud)
 
                 # save
-                stamp = (
-                    f"{joint_state.header.stamp.sec}_{joint_state.header.stamp.nanosec}"
+                stamp = f"{synced_data.joint_state.header.stamp.sec}_{synced_data.joint_state.header.stamp.nanosec}"
+                cv2.imwrite(
+                    os.path.join(path, f"left_img_{stamp}.png"),
+                    left_img_np,
                 )
                 cv2.imwrite(
-                    os.path.join(path, f"img_{stamp}.png"),
-                    img_np,
+                    os.path.join(path, f"right_img_{stamp}.png"),
+                    right_img_np,
                 )
                 np.save(
                     os.path.join(path, f"joint_state_{stamp}.npy"),
