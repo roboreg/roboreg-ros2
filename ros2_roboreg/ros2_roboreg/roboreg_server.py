@@ -63,9 +63,45 @@ class RoboregServer(Node):
     def _delcare_parameters(self) -> None:
         if not self.has_parameter("sync_accuracy"):
             self.declare_parameter("sync_accuracy", 0.01)
+        if not self.has_parameter("left_image_topic"):
+            self.declare_parameter("left_image_topic", "/left/image_rect_color")
+        if not self.has_parameter("right_image_topic"):
+            self.declare_parameter("right_image_topic", "/right/image_rect_color")
+        if not self.has_parameter("left_camera_info_topic"):
+            self.declare_parameter("left_camera_info_topic", "/left/camera_info")
+        if not self.has_parameter("right_camera_info_topic"):
+            self.declare_parameter("right_camera_info_topic", "/right/camera_info")
+        if not self.has_parameter("joint_states_topic"):
+            self.declare_parameter("joint_states_topic", "/joint_states")
+        if not self.has_parameter("point_cloud_topic"):
+            self.declare_parameter("point_cloud_topic", "/point_cloud/cloud_registered")
 
     def _get_parameters(self) -> None:
-        self._sync_accuracy = float(self.get_parameter("sync_accuracy").value)
+        self._sync_accuracy = (
+            self.get_parameter("sync_accuracy").get_parameter_value().double_value
+        )
+        self._left_image_topic = (
+            self.get_parameter("left_image_topic").get_parameter_value().string_value
+        )
+        self._right_image_topic = (
+            self.get_parameter("right_image_topic").get_parameter_value().string_value
+        )
+        self._left_camera_info_topic = (
+            self.get_parameter("left_camera_info_topic")
+            .get_parameter_value()
+            .string_value
+        )
+        self._right_camera_info_topic = (
+            self.get_parameter("right_camera_info_topic")
+            .get_parameter_value()
+            .string_value
+        )
+        self._joint_states_topic = (
+            self.get_parameter("joint_states_topic").get_parameter_value().string_value
+        )
+        self._point_cloud_topic = (
+            self.get_parameter("point_cloud_topic").get_parameter_value().string_value
+        )
 
     def _create_services(self) -> None:
         # callback group
@@ -85,14 +121,16 @@ class RoboregServer(Node):
         )
 
     def _create_subscriptions(self) -> None:
-        self._left_image_sub = Subscriber(self, Image, "left/image_rect_color")
-        self._right_image_sub = Subscriber(self, Image, "right/image_rect_color")
-        self._left_camera_info_sub = Subscriber(self, CameraInfo, "left/camera_info")
-        self._right_camera_info_sub = Subscriber(self, CameraInfo, "right/camera_info")
-        self._joint_state_sub = Subscriber(self, JointState, "/lbr/joint_states")
-        self._point_cloud_sub = Subscriber(
-            self, PointCloud2, "point_cloud/cloud_registered"
+        self._left_image_sub = Subscriber(self, Image, self._left_image_topic)
+        self._right_image_sub = Subscriber(self, Image, self._right_image_topic)
+        self._left_camera_info_sub = Subscriber(
+            self, CameraInfo, self._left_camera_info_topic
         )
+        self._right_camera_info_sub = Subscriber(
+            self, CameraInfo, self._right_camera_info_topic
+        )
+        self._joint_state_sub = Subscriber(self, JointState, self._joint_states_topic)
+        self._point_cloud_sub = Subscriber(self, PointCloud2, self._point_cloud_topic)
 
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [
