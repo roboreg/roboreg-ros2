@@ -83,19 +83,35 @@ class RoboregServer(Node):
         self._left_image_topic = (
             self.get_parameter("left_image_topic").get_parameter_value().string_value
         )
+        if "left" not in self._left_image_topic:
+            self.get_logger().warn(
+                f"Left image topic does not contain 'left' but '{self._left_image_topic}'."
+            )
         self._right_image_topic = (
             self.get_parameter("right_image_topic").get_parameter_value().string_value
         )
+        if "right" not in self._right_image_topic:
+            self.get_logger().warn(
+                f"Right image topic does not contain 'right' but '{self._right_image_topic}'."
+            )
         self._left_camera_info_topic = (
             self.get_parameter("left_camera_info_topic")
             .get_parameter_value()
             .string_value
         )
+        if "left" not in self._left_camera_info_topic:
+            self.get_logger().warn(
+                f"Left camera info topic does not contain 'left' but '{self._left_camera_info_topic}'."
+            )
         self._right_camera_info_topic = (
             self.get_parameter("right_camera_info_topic")
             .get_parameter_value()
             .string_value
         )
+        if "right" not in self._right_camera_info_topic:
+            self.get_logger().warn(
+                f"Right camera info topic does not contain 'right' but '{self._right_camera_info_topic}'."
+            )
         self._joint_states_topic = (
             self.get_parameter("joint_states_topic").get_parameter_value().string_value
         )
@@ -177,6 +193,31 @@ class RoboregServer(Node):
             response.message = f"No data available yet. Maybe data not in sync. Synchronization accuracy: {self._sync_accuracy}."
             self.get_logger().warn(response.message)
             return response
+
+        # check if joint state changed from last data
+        if len(self._synced_data_list) > 1:
+            if np.isclose(
+                self._synced_data_list[-1].joint_state.position,
+                self._synced_data.joint_state.position,
+                atol=1e-3,
+            ).all():
+                response.success = False
+                response.message = f"Joint state did not change. Not adding data."
+                self.get_logger().warn(response.message)
+                return response
+
+        # check if joint state velocity is close to zero
+        if not np.isclose(
+            self._synced_data.joint_state.velocity,
+            np.zeros_like(self._synced_data.joint_state.velocity),
+            atol=1e-4,
+        ).all():
+            response.success = False
+            response.message = f"Joint state velocity is not close zero. This may cause un-correlated data. Not adding data."
+            self.get_logger().warn(response.message)
+            return response
+
+        # add data
         self._synced_data_list.append(copy.deepcopy(self._synced_data))
         response.success = True
         response.message = (
