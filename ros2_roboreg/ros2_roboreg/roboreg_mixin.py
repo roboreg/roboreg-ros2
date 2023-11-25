@@ -32,6 +32,22 @@ class RoboregMixin:
         )
 
     @staticmethod
+    def arg_min_joint_position_change() -> DeclareLaunchArgument:
+        return DeclareLaunchArgument(
+            "min_joint_position_change",
+            default_value="0.001",
+            description="Discard new data if joint position change is smaller than this value.",
+        )
+
+    @staticmethod
+    def arg_max_joint_velocity() -> DeclareLaunchArgument:
+        return DeclareLaunchArgument(
+            "max_joint_velocity",
+            default_value="0.01",
+            description="Discard new data if joint velocity is larger than this value.",
+        )
+
+    @staticmethod
     def arg_left_image_topic() -> DeclareLaunchArgument:
         return DeclareLaunchArgument(
             "left_image_topic",
@@ -82,6 +98,18 @@ class RoboregMixin:
     @staticmethod
     def param_sync_accuracy() -> Dict[str, LaunchConfiguration]:
         return {"sync_accuracy": LaunchConfiguration("sync_accuracy")}
+
+    @staticmethod
+    def param_min_joint_position_change() -> Dict[str, LaunchConfiguration]:
+        return {
+            "min_joint_position_change": LaunchConfiguration(
+                "min_joint_position_change"
+            )
+        }
+
+    @staticmethod
+    def param_max_joint_velocity() -> Dict[str, LaunchConfiguration]:
+        return {"max_joint_velocity": LaunchConfiguration("max_joint_velocity")}
 
     @staticmethod
     def param_left_image_topic() -> Dict[str, LaunchConfiguration]:

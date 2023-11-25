@@ -1,6 +1,8 @@
 /**/roboreg:
   ros__parameters:
     sync_accuracy: 1.0
+    min_joint_position_change: 0.001
+    max_joint_velocity: 0.01
     left_image_topic: /left/image_rect_color
     right_image_topic: /right/image_rect_color
     left_camera_info_topic: /left/camera_info

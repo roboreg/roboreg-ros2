@@ -63,6 +63,10 @@ class RoboregServer(Node):
     def _delcare_parameters(self) -> None:
         if not self.has_parameter("sync_accuracy"):
             self.declare_parameter("sync_accuracy", 0.01)
+        if not self.has_parameter("min_joint_position_change"):
+            self.declare_parameter("min_joint_position_change", 0.001)
+        if not self.has_parameter("max_joint_velocity"):
+            self.declare_parameter("max_joint_velocity", 0.01)
         if not self.has_parameter("left_image_topic"):
             self.declare_parameter("left_image_topic", "/left/image_rect_color")
         if not self.has_parameter("right_image_topic"):
@@ -79,6 +83,14 @@ class RoboregServer(Node):
     def _get_parameters(self) -> None:
         self._sync_accuracy = (
             self.get_parameter("sync_accuracy").get_parameter_value().double_value
+        )
+        self._max_joint_velocity = (
+            self.get_parameter("max_joint_velocity").get_parameter_value().double_value
+        )
+        self._min_joint_position_change = (
+            self.get_parameter("min_joint_position_change")
+            .get_parameter_value()
+            .double_value
         )
         self._left_image_topic = (
             self.get_parameter("left_image_topic").get_parameter_value().string_value
@@ -190,30 +202,32 @@ class RoboregServer(Node):
             or self._synced_data.point_cloud is None
         ):
             response.success = False
-            response.message = f"No data available yet. Maybe data not in sync. Synchronization accuracy: {self._sync_accuracy}."
+            response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._sync_accuracy}s."
             self.get_logger().warn(response.message)
             return response
 
-        # check if joint state changed from last data
+        # check if joint states changed from last data
         if len(self._synced_data_list) > 1:
             if np.isclose(
                 self._synced_data_list[-1].joint_state.position,
                 self._synced_data.joint_state.position,
-                atol=1e-3,
+                atol=self._min_joint_position_change,
             ).all():
                 response.success = False
-                response.message = f"Joint state did not change. Not adding data."
+                response.message = (
+                    f"Joint states did not change. Skipping data collection."
+                )
                 self.get_logger().warn(response.message)
                 return response
 
-        # check if joint state velocity is close to zero
+        # only allow joint states velocities close to zero
         if not np.isclose(
             self._synced_data.joint_state.velocity,
             np.zeros_like(self._synced_data.joint_state.velocity),
-            atol=1e-4,
+            atol=self._max_joint_velocity,
         ).all():
             response.success = False
-            response.message = f"Joint state velocity is not close zero. This may cause un-correlated data. Not adding data."
+            response.message = f"Joint states velocity greater zero. This may cause un-correlated data. Skipping data collection."
             self.get_logger().warn(response.message)
             return response
 
