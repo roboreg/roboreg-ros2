@@ -1,0 +1,4 @@
+---
+bool success
+uint8 n_collected
+string message

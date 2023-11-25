@@ -13,7 +13,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from std_srvs.srv import Trigger
 
-from ros2_roboreg_msgs.srv import SaveSyncedData
+from ros2_roboreg_msgs.srv import CollectData, SaveSyncedData
 
 
 @dataclass
@@ -136,7 +136,10 @@ class RoboregServer(Node):
         callback_group = MutuallyExclusiveCallbackGroup()
 
         self.collect_service = self.create_service(
-            Trigger, "~/collect", self._on_collect, callback_group=callback_group
+            CollectData,
+            "~/collect_data",
+            self._on_collect,
+            callback_group=callback_group,
         )
         self.register_service = self.create_service(
             Trigger, "~/register", self._on_register
@@ -191,8 +194,8 @@ class RoboregServer(Node):
         self._synced_data.point_cloud = point_cloud
 
     def _on_collect(
-        self, request: Trigger.Request, response: Trigger.Response
-    ) -> Trigger.Response:
+        self, request: CollectData.Request, response: CollectData.Response
+    ) -> CollectData.Response:
         if (
             self._synced_data.right_image is None
             or self._synced_data.left_image is None
@@ -202,6 +205,7 @@ class RoboregServer(Node):
             or self._synced_data.point_cloud is None
         ):
             response.success = False
+            response.n_collected = len(self._synced_data_list)
             response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._sync_accuracy}s."
             self.get_logger().warn(response.message)
             return response
@@ -214,9 +218,8 @@ class RoboregServer(Node):
                 atol=self._min_joint_position_change,
             ).all():
                 response.success = False
-                response.message = (
-                    f"Joint states did not change. Skipping data collection."
-                )
+                response.n_collected = len(self._synced_data_list)
+                response.message = f"Joint states did not change. Minimum joint position change: {self._min_joint_position_change} rad. Skipping data collection."
                 self.get_logger().warn(response.message)
                 return response
 
@@ -227,13 +230,15 @@ class RoboregServer(Node):
             atol=self._max_joint_velocity,
         ).all():
             response.success = False
-            response.message = f"Joint states velocity greater zero. This may cause un-correlated data. Skipping data collection."
+            response.n_collected = len(self._synced_data_list)
+            response.message = f"Joint states velocity greater zero. Maximum joint velocity: {self._max_joint_velocity} rad/s. This may cause un-correlated data. Skipping data collection."
             self.get_logger().warn(response.message)
             return response
 
         # add data
         self._synced_data_list.append(copy.deepcopy(self._synced_data))
         response.success = True
+        response.n_collected = len(self._synced_data_list)
         response.message = (
             f"Added data with time stamp: {self._synced_data.joint_state.header.stamp}"
         )
@@ -258,6 +263,7 @@ class RoboregServer(Node):
             return response
 
         path = pathlib.Path(request.path)
+        self.get_logger().info(f"Saving data to {path.absolute()}.")
 
         def write_synced_data():
             bridge = cv_bridge.CvBridge()
@@ -354,42 +360,50 @@ class RoboregServer(Node):
                 os.path.join(path, "right_camera_info.yaml"),
             )
 
-            for synced_data in self._synced_data_list:
-                # convert to numpy
-                left_img_np = bridge.imgmsg_to_cv2(
-                    synced_data.left_image, desired_encoding="passthrough"
-                )
-                right_img_np = bridge.imgmsg_to_cv2(
-                    synced_data.right_image, desired_encoding="passthrough"
-                )
-                joint_position = synced_data.joint_state.position
-                name = synced_data.joint_state.name
-                joint_position = [x for _, x in sorted(zip(name, joint_position))]
-                joint_position_np = np.array(joint_position)
-                xyz_np, rgba_np = point_cloud_to_numpy(synced_data.point_cloud)
+            # log time stamps to csv
+            with open(os.path.join(path, "time_stamps.csv"), "w") as f:
+                f.write("idx,sec,nanosec\n")
 
-                # save
-                stamp = f"{synced_data.joint_state.header.stamp.sec}_{synced_data.joint_state.header.stamp.nanosec}"
-                cv2.imwrite(
-                    os.path.join(path, f"left_img_{stamp}.png"),
-                    left_img_np,
-                )
-                cv2.imwrite(
-                    os.path.join(path, f"right_img_{stamp}.png"),
-                    right_img_np,
-                )
-                np.save(
-                    os.path.join(path, f"joint_state_{stamp}.npy"),
-                    joint_position_np,
-                )
-                np.save(
-                    os.path.join(path, f"xyz_{stamp}.npy"),
-                    xyz_np,
-                )
-                np.save(
-                    os.path.join(path, f"rgba_{stamp}.npy"),
-                    rgba_np,
-                )
+                for idx, synced_data in enumerate(self._synced_data_list):
+                    # log time stamps
+                    f.write(
+                        f"{idx},{synced_data.joint_state.header.stamp.sec},{synced_data.joint_state.header.stamp.nanosec}\n"
+                    )
+
+                    # convert to numpy
+                    left_img_np = bridge.imgmsg_to_cv2(
+                        synced_data.left_image, desired_encoding="passthrough"
+                    )
+                    right_img_np = bridge.imgmsg_to_cv2(
+                        synced_data.right_image, desired_encoding="passthrough"
+                    )
+                    joint_position = synced_data.joint_state.position
+                    name = synced_data.joint_state.name
+                    joint_position = [x for _, x in sorted(zip(name, joint_position))]
+                    joint_position_np = np.array(joint_position)
+                    xyz_np, rgba_np = point_cloud_to_numpy(synced_data.point_cloud)
+
+                    # save
+                    cv2.imwrite(
+                        os.path.join(path, f"left_img_{idx}.png"),
+                        left_img_np,
+                    )
+                    cv2.imwrite(
+                        os.path.join(path, f"right_img_{idx}.png"),
+                        right_img_np,
+                    )
+                    np.save(
+                        os.path.join(path, f"joint_state_{idx}.npy"),
+                        joint_position_np,
+                    )
+                    np.save(
+                        os.path.join(path, f"xyz_{idx}.npy"),
+                        xyz_np,
+                    )
+                    np.save(
+                        os.path.join(path, f"rgba_{idx}.npy"),
+                        rgba_np,
+                    )
             self._synced_data_list.clear()
 
         if path.exists():
