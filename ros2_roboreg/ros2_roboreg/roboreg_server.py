@@ -206,7 +206,7 @@ class RoboregServer(Node):
         ):
             response.success = False
             response.n_collected = len(self._synced_data_list)
-            response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._sync_accuracy}s."
+            response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._sync_accuracy} s."
             self.get_logger().warn(response.message)
             return response
 
