@@ -53,6 +53,7 @@ class RoboregServer(Node):
         # parameters
         self._delcare_parameters()
         self._get_parameters()
+        self._log_parameters()
 
         # subscriptions
         self._create_subscriptions()
@@ -130,6 +131,23 @@ class RoboregServer(Node):
         self._point_cloud_topic = (
             self.get_parameter("point_cloud_topic").get_parameter_value().string_value
         )
+
+    def _log_parameters(self) -> None:
+        self.get_logger().info(f"*** Parameters:")
+        self.get_logger().info(f"*   Sync accuracy: {self._sync_accuracy} s.")
+        self.get_logger().info(f"*   Max joint velocity: {self._max_joint_velocity} rad/s.")
+        self.get_logger().info(
+            f"*   Min joint position change: {self._min_joint_position_change} rad."
+        )
+        self.get_logger().info(f"*   Left image topic: {self._left_image_topic}.")
+        self.get_logger().info(f"*   Right image topic: {self._right_image_topic}.")
+        self.get_logger().info(f"*   Left camera info topic: {self._left_camera_info_topic}.")
+        self.get_logger().info(
+            f"*   Right camera info topic: {self._right_camera_info_topic}."
+        )
+        self.get_logger().info(f"*   Joint states topic: {self._joint_states_topic}.")
+        self.get_logger().info(f"*   Point cloud topic: {self._point_cloud_topic}.")
+        self.get_logger().info("***")
 
     def _create_services(self) -> None:
         # callback group
