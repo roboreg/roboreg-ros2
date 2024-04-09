@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 
-from ros2_roboreg import RoboregMixin
+from launch_mixins.ros2_roboreg import RoboregMixin
 
 
 def generate_launch_description() -> LaunchDescription:
