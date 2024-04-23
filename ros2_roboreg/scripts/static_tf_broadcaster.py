@@ -1,13 +1,12 @@
 import argparse
+
 import numpy as np
-
 import rclpy
-from rclpy.node import Node
-
-from std_msgs.msg import Header
-from geometry_msgs.msg import TransformStamped, Transform, Vector3, Quaternion
-from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 import transformations
+from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
+from rclpy.node import Node
+from std_msgs.msg import Header
+from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
 
 class StaticTFBroadcaster(Node):
@@ -48,7 +47,7 @@ def main():
     parser.add_argument("--parent", type=str, default="zed2_left_camera_frame")
     parser.add_argument("--child", type=str, default="/left/left_base_frame")
     parser.add_argument("--ht", type=str, required=True)
-    args = parser.parse_args()
+    args, unkown_args = parser.parse_known_args()
 
     static_tf_broadcaster = StaticTFBroadcaster()
 
