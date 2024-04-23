@@ -26,9 +26,9 @@ class StaticTFBroadcaster(Node):
                 child_frame_id=child,
                 transform=Transform(
                     translation=Vector3(
-                        x=xyz[0],
-                        y=xyz[1],
-                        z=xyz[2],
+                        x=xyz.item(0),
+                        y=xyz.item(1),
+                        z=xyz.item(2),
                     ),
                     rotation=Quaternion(
                         x=quaternion[1],
