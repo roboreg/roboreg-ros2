@@ -69,17 +69,17 @@ class RoboregServer(Node):
         if not self.has_parameter("max_joint_velocity"):
             self.declare_parameter("max_joint_velocity", 0.01)
         if not self.has_parameter("left_image_topic"):
-            self.declare_parameter("left_image_topic", "/left/image_rect_color")
+            self.declare_parameter("left_image_topic", "left/image_rect_color")
         if not self.has_parameter("right_image_topic"):
-            self.declare_parameter("right_image_topic", "/right/image_rect_color")
+            self.declare_parameter("right_image_topic", "right/image_rect_color")
         if not self.has_parameter("left_camera_info_topic"):
-            self.declare_parameter("left_camera_info_topic", "/left/camera_info")
+            self.declare_parameter("left_camera_info_topic", "left/camera_info")
         if not self.has_parameter("right_camera_info_topic"):
-            self.declare_parameter("right_camera_info_topic", "/right/camera_info")
+            self.declare_parameter("right_camera_info_topic", "right/camera_info")
         if not self.has_parameter("joint_states_topic"):
-            self.declare_parameter("joint_states_topic", "/joint_states")
+            self.declare_parameter("joint_states_topic", "joint_states")
         if not self.has_parameter("point_cloud_topic"):
-            self.declare_parameter("point_cloud_topic", "/point_cloud/cloud_registered")
+            self.declare_parameter("point_cloud_topic", "point_cloud/cloud_registered")
 
     def _get_parameters(self) -> None:
         self._sync_accuracy = (
@@ -135,13 +135,17 @@ class RoboregServer(Node):
     def _log_parameters(self) -> None:
         self.get_logger().info(f"*** Parameters:")
         self.get_logger().info(f"*   Sync accuracy: {self._sync_accuracy} s.")
-        self.get_logger().info(f"*   Max joint velocity: {self._max_joint_velocity} rad/s.")
+        self.get_logger().info(
+            f"*   Max joint velocity: {self._max_joint_velocity} rad/s."
+        )
         self.get_logger().info(
             f"*   Min joint position change: {self._min_joint_position_change} rad."
         )
         self.get_logger().info(f"*   Left image topic: {self._left_image_topic}.")
         self.get_logger().info(f"*   Right image topic: {self._right_image_topic}.")
-        self.get_logger().info(f"*   Left camera info topic: {self._left_camera_info_topic}.")
+        self.get_logger().info(
+            f"*   Left camera info topic: {self._left_camera_info_topic}."
+        )
         self.get_logger().info(
             f"*   Right camera info topic: {self._right_camera_info_topic}."
         )

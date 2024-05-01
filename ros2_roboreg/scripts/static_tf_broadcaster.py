@@ -85,10 +85,30 @@ class StaticTFBroadcaster(Node):
 def main():
     rclpy.init(args=None)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--parent", type=str, default="base_frame")
-    parser.add_argument("--child", type=str, default="camera_frame")
-    parser.add_argument("--target_child", type=str, default="")
-    parser.add_argument("--ht", type=str, required=True)
+    parser.add_argument(
+        "--parent",
+        type=str,
+        default="base_frame",
+        help="Parent frame for published transform.",
+    )
+    parser.add_argument(
+        "--child",
+        type=str,
+        default="camera_frame",
+        help="Child frame for published transform.",
+    )
+    parser.add_argument(
+        "--target_child",
+        type=str,
+        default="",
+        help="Specify another target child than child, e.g. camera link.",
+    )
+    parser.add_argument(
+        "--ht",
+        type=str,
+        required=True,
+        help="Path to homogeneous transform. Expects a numpy file, i.e. *.npy.",
+    )
     args, unkown_args = parser.parse_known_args()
 
     static_tf_broadcaster = StaticTFBroadcaster()
