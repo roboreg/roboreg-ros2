@@ -18,26 +18,20 @@ from ros2_roboreg_msgs.srv import CollectData, SaveSyncedData
 
 @dataclass
 class SyncedData:
-    left_image: Image
-    right_image: Image
-    left_camera_info: CameraInfo
-    right_camera_info: CameraInfo
+    image: Image
+    camera_info: CameraInfo
     joint_state: JointState
     point_cloud: PointCloud2
 
     def __init__(self) -> None:
-        self.left_image = None
-        self.right_image = None
-        self.left_camera_info = None
-        self.right_camera_info = None
+        self.image = None
+        self.camera_info = None
         self.joint_state = None
         self.point_cloud = None
 
     def clear(self) -> None:
-        self.left_image = None
-        self.right_image = None
-        self.left_camera_info = None
-        self.right_camera_info = None
+        self.image = None
+        self.camera_info = None
         self.joint_state = None
         self.point_cloud = None
 
@@ -68,14 +62,10 @@ class RoboregServer(Node):
             self.declare_parameter("min_joint_position_change", 0.001)
         if not self.has_parameter("max_joint_velocity"):
             self.declare_parameter("max_joint_velocity", 0.01)
-        if not self.has_parameter("left_image_topic"):
-            self.declare_parameter("left_image_topic", "left/image_rect_color")
-        if not self.has_parameter("right_image_topic"):
-            self.declare_parameter("right_image_topic", "right/image_rect_color")
-        if not self.has_parameter("left_camera_info_topic"):
-            self.declare_parameter("left_camera_info_topic", "left/camera_info")
-        if not self.has_parameter("right_camera_info_topic"):
-            self.declare_parameter("right_camera_info_topic", "right/camera_info")
+        if not self.has_parameter("image_topic"):
+            self.declare_parameter("image_topic", "left/image_rect_color")
+        if not self.has_parameter("camera_info_topic"):
+            self.declare_parameter("camera_info_topic", "left/camera_info")
         if not self.has_parameter("joint_states_topic"):
             self.declare_parameter("joint_states_topic", "joint_states")
         if not self.has_parameter("point_cloud_topic"):
@@ -93,38 +83,12 @@ class RoboregServer(Node):
             .get_parameter_value()
             .double_value
         )
-        self._left_image_topic = (
-            self.get_parameter("left_image_topic").get_parameter_value().string_value
+        self._image_topic = (
+            self.get_parameter("image_topic").get_parameter_value().string_value
         )
-        if "left" not in self._left_image_topic:
-            self.get_logger().warn(
-                f"Left image topic does not contain 'left' but '{self._left_image_topic}'."
-            )
-        self._right_image_topic = (
-            self.get_parameter("right_image_topic").get_parameter_value().string_value
+        self._camera_info_topic = (
+            self.get_parameter("camera_info_topic").get_parameter_value().string_value
         )
-        if "right" not in self._right_image_topic:
-            self.get_logger().warn(
-                f"Right image topic does not contain 'right' but '{self._right_image_topic}'."
-            )
-        self._left_camera_info_topic = (
-            self.get_parameter("left_camera_info_topic")
-            .get_parameter_value()
-            .string_value
-        )
-        if "left" not in self._left_camera_info_topic:
-            self.get_logger().warn(
-                f"Left camera info topic does not contain 'left' but '{self._left_camera_info_topic}'."
-            )
-        self._right_camera_info_topic = (
-            self.get_parameter("right_camera_info_topic")
-            .get_parameter_value()
-            .string_value
-        )
-        if "right" not in self._right_camera_info_topic:
-            self.get_logger().warn(
-                f"Right camera info topic does not contain 'right' but '{self._right_camera_info_topic}'."
-            )
         self._joint_states_topic = (
             self.get_parameter("joint_states_topic").get_parameter_value().string_value
         )
@@ -141,14 +105,8 @@ class RoboregServer(Node):
         self.get_logger().info(
             f"*   Min joint position change: {self._min_joint_position_change} rad."
         )
-        self.get_logger().info(f"*   Left image topic: {self._left_image_topic}.")
-        self.get_logger().info(f"*   Right image topic: {self._right_image_topic}.")
-        self.get_logger().info(
-            f"*   Left camera info topic: {self._left_camera_info_topic}."
-        )
-        self.get_logger().info(
-            f"*   Right camera info topic: {self._right_camera_info_topic}."
-        )
+        self.get_logger().info(f"*   Image topic: {self._image_topic}.")
+        self.get_logger().info(f"*   Camera info topic: {self._camera_info_topic}.")
         self.get_logger().info(f"*   Joint states topic: {self._joint_states_topic}.")
         self.get_logger().info(f"*   Point cloud topic: {self._point_cloud_topic}.")
         self.get_logger().info("***")
@@ -174,23 +132,15 @@ class RoboregServer(Node):
         )
 
     def _create_subscriptions(self) -> None:
-        self._left_image_sub = Subscriber(self, Image, self._left_image_topic)
-        self._right_image_sub = Subscriber(self, Image, self._right_image_topic)
-        self._left_camera_info_sub = Subscriber(
-            self, CameraInfo, self._left_camera_info_topic
-        )
-        self._right_camera_info_sub = Subscriber(
-            self, CameraInfo, self._right_camera_info_topic
-        )
+        self._image_sub = Subscriber(self, Image, self._image_topic)
+        self._camera_info_sub = Subscriber(self, CameraInfo, self._camera_info_topic)
         self._joint_state_sub = Subscriber(self, JointState, self._joint_states_topic)
         self._point_cloud_sub = Subscriber(self, PointCloud2, self._point_cloud_topic)
 
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [
-                self._left_image_sub,
-                self._right_image_sub,
-                self._left_camera_info_sub,
-                self._right_camera_info_sub,
+                self._image_sub,
+                self._camera_info_sub,
                 self._joint_state_sub,
                 self._point_cloud_sub,
             ],
@@ -201,17 +151,13 @@ class RoboregServer(Node):
 
     def _on_sync(
         self,
-        left_image: Image,
-        right_image: Image,
-        left_camera_info: CameraInfo,
-        right_camera_info: CameraInfo,
+        image: Image,
+        camera_info: CameraInfo,
         joint_state: JointState,
         point_cloud: PointCloud2,
     ):
-        self._synced_data.left_image = left_image
-        self._synced_data.right_image = right_image
-        self._synced_data.left_camera_info = left_camera_info
-        self._synced_data.right_camera_info = right_camera_info
+        self._synced_data.image = image
+        self._synced_data.camera_info = camera_info
         self._synced_data.joint_state = joint_state
         self._synced_data.point_cloud = point_cloud
 
@@ -219,10 +165,8 @@ class RoboregServer(Node):
         self, request: CollectData.Request, response: CollectData.Response
     ) -> CollectData.Response:
         if (
-            self._synced_data.right_image is None
-            or self._synced_data.left_image is None
-            or self._synced_data.left_camera_info is None
-            or self._synced_data.right_camera_info is None
+            self._synced_data.image is None
+            or self._synced_data.camera_info is None
             or self._synced_data.joint_state is None
             or self._synced_data.point_cloud is None
         ):
@@ -374,12 +318,8 @@ class RoboregServer(Node):
 
             # save camera info
             write_camera_info_to_yaml(
-                self._synced_data_list[0].left_camera_info,
-                os.path.join(path, "left_camera_info.yaml"),
-            )
-            write_camera_info_to_yaml(
-                self._synced_data_list[0].right_camera_info,
-                os.path.join(path, "right_camera_info.yaml"),
+                self._synced_data_list[0].camera_info,
+                os.path.join(path, "camera_info.yaml"),
             )
 
             # log time stamps to csv
@@ -393,11 +333,8 @@ class RoboregServer(Node):
                     )
 
                     # convert to numpy
-                    left_img_np = bridge.imgmsg_to_cv2(
-                        synced_data.left_image, desired_encoding="passthrough"
-                    )
-                    right_img_np = bridge.imgmsg_to_cv2(
-                        synced_data.right_image, desired_encoding="passthrough"
+                    image_np = bridge.imgmsg_to_cv2(
+                        synced_data.image, desired_encoding="passthrough"
                     )
                     joint_position = synced_data.joint_state.position
                     name = synced_data.joint_state.name
@@ -407,12 +344,8 @@ class RoboregServer(Node):
 
                     # save
                     cv2.imwrite(
-                        os.path.join(path, f"left_img_{idx}.png"),
-                        left_img_np,
-                    )
-                    cv2.imwrite(
-                        os.path.join(path, f"right_img_{idx}.png"),
-                        right_img_np,
+                        os.path.join(path, f"image_{idx}.png"),
+                        image_np,
                     )
                     np.save(
                         os.path.join(path, f"joint_state_{idx}.npy"),
