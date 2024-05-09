@@ -48,35 +48,19 @@ class RoboregMixin:
         )
 
     @staticmethod
-    def arg_left_image_topic() -> DeclareLaunchArgument:
+    def arg_image_topic() -> DeclareLaunchArgument:
         return DeclareLaunchArgument(
-            "left_image_topic",
-            default_value="/left/image_rect_color",
-            description="Left rectified color image topic.",
+            "image_topic",
+            default_value="/image_rect_color",
+            description="Rectified color image topic.",
         )
 
     @staticmethod
-    def arg_right_image_topic() -> DeclareLaunchArgument:
+    def arg_camera_info_topic() -> DeclareLaunchArgument:
         return DeclareLaunchArgument(
-            "right_image_topic",
-            default_value="/right/image_rect_color",
-            description="Right rectified color image topic.",
-        )
-
-    @staticmethod
-    def arg_left_camera_info_topic() -> DeclareLaunchArgument:
-        return DeclareLaunchArgument(
-            "left_camera_info_topic",
-            default_value="/left/camera_info",
-            description="Left camera info topic.",
-        )
-
-    @staticmethod
-    def arg_right_camera_info_topic() -> DeclareLaunchArgument:
-        return DeclareLaunchArgument(
-            "right_camera_info_topic",
-            default_value="/right/camera_info",
-            description="Right camera info topic.",
+            "camera_info_topic",
+            default_value="/camera_info",
+            description="Camera info topic.",
         )
 
     @staticmethod
@@ -112,22 +96,12 @@ class RoboregMixin:
         return {"max_joint_velocity": LaunchConfiguration("max_joint_velocity")}
 
     @staticmethod
-    def param_left_image_topic() -> Dict[str, LaunchConfiguration]:
-        return {"left_image_topic": LaunchConfiguration("left_image_topic")}
+    def param_image_topic() -> Dict[str, LaunchConfiguration]:
+        return {"image_topic": LaunchConfiguration("image_topic")}
 
     @staticmethod
-    def param_right_image_topic() -> Dict[str, LaunchConfiguration]:
-        return {"right_image_topic": LaunchConfiguration("right_image_topic")}
-
-    @staticmethod
-    def param_left_camera_info_topic() -> Dict[str, LaunchConfiguration]:
-        return {"left_camera_info_topic": LaunchConfiguration("left_camera_info_topic")}
-
-    @staticmethod
-    def param_right_camera_info_topic() -> Dict[str, LaunchConfiguration]:
-        return {
-            "right_camera_info_topic": LaunchConfiguration("right_camera_info_topic")
-        }
+    def param_camera_info_topic() -> Dict[str, LaunchConfiguration]:
+        return {"camera_info_topic": LaunchConfiguration("camera_info_topic")}
 
     @staticmethod
     def param_joint_states_topic() -> Dict[str, LaunchConfiguration]:
