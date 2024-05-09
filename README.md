@@ -15,7 +15,7 @@ ros2 launch ros2_roboreg server.launch.py -s
 ```
 
 #### Subscriped Topics
-* `image_rect_color`: # TODO: currently only one image used for actual registration
+* `image_rect_color`
 * `camera_info`: 
 * `joint_states`: 
 * `point_cloud/cloud_registered`: 
