@@ -1,1 +1,1 @@
-from .roboreg_server import RoboregServer
+from .server import RoboregServer
