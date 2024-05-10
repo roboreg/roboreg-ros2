@@ -348,7 +348,7 @@ class RoboregServer(Node):
                         image_np,
                     )
                     np.save(
-                        os.path.join(path, f"joint_state_{idx}.npy"),
+                        os.path.join(path, f"joint_states_{idx}.npy"),
                         joint_position_np,
                     )
                     np.save(
