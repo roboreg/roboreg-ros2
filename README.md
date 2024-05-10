@@ -4,12 +4,24 @@
 
 ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
 
-## Table of Content
-
+## Table of Contents
+* [Installation](#installation)
 * [Nodes](#nodes)
     * [Roboreg Server](#roboreg-server)
     * [Autoreg](#autoreg)
     * [Static TF Broadcaster](#static-tf-broadcaster)
+
+## Installation
+- Install [roboreg](https://github.com/lbr-stack/roboreg):
+```shell
+pip3 install git+https://github.com/lbr-stack/roboreg.git
+```
+- Build this wrapper
+```shell
+mkdir -p lbr-stack/src && cd lbr-stack
+git clone https://github.com/lbr-stack/roboreg.git src/ros2_roboreg
+colcon build --symlink-install
+```
 
 ## Nodes
 ### Roboreg Server
