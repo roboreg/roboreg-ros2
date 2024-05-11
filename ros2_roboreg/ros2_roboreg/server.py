@@ -13,7 +13,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from std_srvs.srv import Trigger
 
-from ros2_roboreg_msgs.srv import CollectData, SaveSyncedData
+from ros2_roboreg_idl.srv import CollectData, SaveSyncedData
 
 
 @dataclass

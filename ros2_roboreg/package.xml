@@ -15,7 +15,7 @@
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>message_filters</exec_depend>
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>ros2_roboreg_msgs</exec_depend>
+  <exec_depend>ros2_roboreg_idl</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>std_msgs</exec_depend>

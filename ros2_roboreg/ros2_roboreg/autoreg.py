@@ -12,7 +12,7 @@ from control_msgs.action import FollowJointTrajectory
 from rclpy.action import ActionClient
 import numpy as np
 from rclpy.node import Node
-from ros2_roboreg_msgs.srv import CollectData
+from ros2_roboreg_idl.srv import CollectData
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 
