@@ -1,0 +1,9 @@
+<library path="ros2_roboreg_rviz">
+    <class name="ros2_roboreg_rviz/Roboreg"
+        type="ros2_roboreg_rviz::Display"
+        base_class_type="rviz_common::Display">
+        <description>
+            Roboreg RViZ plugin for calling into services.
+        </description>
+    </class>
+</library>
