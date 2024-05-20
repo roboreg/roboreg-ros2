@@ -10,8 +10,19 @@ import numpy as np
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
-from rclpy.qos import ReliabilityPolicy, qos_profile_system_default
+from rclpy.qos import (
+    DurabilityPolicy,
+    ReliabilityPolicy,
+    qos_profile_system_default,
+)
+
+from roboreg.detector import OpenCVDetector
+from roboreg.hydra_icp import hydra_centroid_alignment, hydra_robust_icp
+from roboreg.o3d_robot import O3DRobot
+from roboreg.segmentor import SamSegmentor
+
 from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
+from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 from ros2_roboreg_idl.srv import CollectData, SaveSyncedData
@@ -37,6 +48,67 @@ class SyncedData:
         self.point_cloud = None
 
 
+@dataclass
+class ServerParams:
+    class _Filters:
+        sync_accuracy: float
+        min_joint_position_change: float
+        max_joint_velocity: float
+
+        def __init__(self) -> None:
+            self.sync_accuracy = 0.01
+            self.min_joint_position_change = 0.001
+            self.max_joint_velocity = 0.01
+
+    @dataclass
+    class _TopicParam:
+        name: str
+        qos_reliability: str
+
+        def __init__(self) -> None:
+            self.name = ""
+            self.qos_reliability = ""
+
+    @dataclass
+    class _SegmentationParams:
+        buffer_size: int
+        model_type: str
+        device: str
+        sam_checkpoint_path: str
+
+        def __init__(self) -> None:
+            self.buffer_size = 5
+            self.model_type = "vit_h"
+            self.device = "cuda"
+            self.sam_checkpoint_path = ""
+
+    @dataclass
+    class _RegistrationParams:
+        convex_hull: bool
+        max_distance: float
+        outer_max_iter: int
+        inner_max_iter: int
+        rmse_change: float
+
+        def __init__(self) -> None:
+            self.convex_hull = False
+            self.max_distance = 0.1
+            self.outer_max_iter = 100
+            self.inner_max_iter = 3
+            self.rmse_change = 1.0e-6
+            self.sam_checkpoint_path = ""
+
+    def __init__(self) -> None:
+        self.filters = self._Filters()
+        self.image_topic = self._TopicParam()
+        self.camera_info_topic = self._TopicParam()
+        self.joint_states_topic = self._TopicParam()
+        self.point_cloud_topic = self._TopicParam()
+        self.robot_description_topic = self._TopicParam()
+        self.segmentation = self._SegmentationParams()
+        self.registration = self._RegistrationParams()
+
+
 class RoboregServer(Node):
     def __init__(self, node_name: str = "roboreg") -> None:
         super().__init__(node_name)
@@ -45,8 +117,12 @@ class RoboregServer(Node):
         self._synced_data = SyncedData()
         self._synced_data_list: List[SyncedData] = []
 
+        # opencv bridge
+        self._bridge = cv_bridge.CvBridge()
+
         # parameters
-        self._delcare_parameters()
+        self._params = ServerParams()
+        self._declare_parameters()
         self._get_parameters()
         self._log_parameters()
 
@@ -56,111 +132,228 @@ class RoboregServer(Node):
         # services
         self._create_services()
 
-    def _delcare_parameters(self) -> None:
-        if not self.has_parameter("sync_accuracy"):
-            self.declare_parameter("sync_accuracy", 0.01)
-        if not self.has_parameter("min_joint_position_change"):
-            self.declare_parameter("min_joint_position_change", 0.001)
-        if not self.has_parameter("max_joint_velocity"):
-            self.declare_parameter("max_joint_velocity", 0.01)
-        if not self.has_parameter("image_topic.name"):
-            self.declare_parameter("image_topic.name", "left/image_rect_color")
-        if not self.has_parameter("image_topic.qos_reliability"):
-            self.declare_parameter("image_topic.qos_reliability", "reliable")
-        if not self.has_parameter("camera_info_topic.name"):
-            self.declare_parameter("camera_info_topic.name", "left/camera_info")
-        if not self.has_parameter("camera_info_topic.qos_reliability"):
-            self.declare_parameter("camera_info_topic.qos_reliability", "reliable")
-        if not self.has_parameter("joint_states_topic.name"):
-            self.declare_parameter("joint_states_topic.name", "joint_states")
-        if not self.has_parameter("joint_states_topic.qos_reliability"):
-            self.declare_parameter("joint_states_topic.qos_reliability", "reliable")
-        if not self.has_parameter("point_cloud_topic.name"):
-            self.declare_parameter(
-                "point_cloud_topic.name", "point_cloud/cloud_registered"
-            )
-        if not self.has_parameter("point_cloud_topic.qos_reliability"):
-            self.declare_parameter("point_cloud_topic.qos_reliability", "reliable")
+    def _declare_parameters(self) -> None:
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("filters.sync_accuracy", 0.01),
+                ("filters.min_joint_position_change", 0.001),
+                ("filters.max_joint_velocity", 0.01),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("topics.image.name", "left/image_rect_color"),
+                ("topics.image.qos_reliability", "RELIABLE"),
+                ("topics.camera_info.name", "left/camera_info"),
+                ("topics.camera_info.qos_reliability", "RELIABLE"),
+                ("topics.joint_states.name", "joint_states"),
+                ("topics.joint_states.qos_reliability", "RELIABLE"),
+                ("topics.point_cloud.name", "point_cloud/cloud_registered"),
+                ("topics.point_cloud.qos_reliability", "RELIABLE"),
+                ("topics.robot_description.name", "robot_description"),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("segmentation.buffer_size", 5),
+                ("segmentation.model_type", "vit_h"),
+                ("segmentation.device", "cuda"),
+                ("segmentation.sam_checkpoint_path", ""),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("registration.convex_hull", False),
+                ("registration.max_distance", 0.1),
+                ("registration.outer_max_iter", 100),
+                ("registration.inner_max_iter", 3),
+                ("registration.rmse_change", 1.0e-6),
+            ],
+        )
 
     def _get_parameters(self) -> None:
-        self._sync_accuracy = (
-            self.get_parameter("sync_accuracy").get_parameter_value().double_value
-        )
-        self._max_joint_velocity = (
-            self.get_parameter("max_joint_velocity").get_parameter_value().double_value
-        )
-        self._min_joint_position_change = (
-            self.get_parameter("min_joint_position_change")
+        # filter parameters
+        self._params.filters.sync_accuracy = (
+            self.get_parameter("filters.sync_accuracy")
             .get_parameter_value()
             .double_value
         )
-        self._image_topic_name = (
-            self.get_parameter("image_topic.name").get_parameter_value().string_value
+        self._params.filters.max_joint_velocity = (
+            self.get_parameter("filters.max_joint_velocity")
+            .get_parameter_value()
+            .double_value
         )
-        self._image_qos_reliability = (
-            self.get_parameter("image_topic.qos_reliability")
+
+        self._params.filters.min_joint_position_change = (
+            self.get_parameter("filters.min_joint_position_change")
+            .get_parameter_value()
+            .double_value
+        )
+
+        # topic parameters
+        self._params.image_topic.name = (
+            self.get_parameter("topics.image.name").get_parameter_value().string_value
+        )
+        self._params.image_topic.qos_reliability = (
+            self.get_parameter("topics.image.qos_reliability")
             .get_parameter_value()
             .string_value
         )
-        self._camera_info_topic_name = (
-            self.get_parameter("camera_info_topic.name")
+        self._params.camera_info_topic.name = (
+            self.get_parameter("topics.camera_info.name")
             .get_parameter_value()
             .string_value
         )
-        self._camera_info_qos_reliability = (
-            self.get_parameter("camera_info_topic.qos_reliability")
+        self._params.camera_info_topic.qos_reliability = (
+            self.get_parameter("topics.camera_info.qos_reliability")
             .get_parameter_value()
             .string_value
         )
-        self._joint_states_topic_name = (
-            self.get_parameter("joint_states_topic.name")
+        self._params.joint_states_topic.name = (
+            self.get_parameter("topics.joint_states.name")
             .get_parameter_value()
             .string_value
         )
-        self._joint_states_qos_reliability = (
-            self.get_parameter("joint_states_topic.qos_reliability")
+        self._params.joint_states_topic.qos_reliability = (
+            self.get_parameter("topics.joint_states.qos_reliability")
             .get_parameter_value()
             .string_value
         )
-        self._point_cloud_topic_name = (
-            self.get_parameter("point_cloud_topic.name")
+        self._params.point_cloud_topic.name = (
+            self.get_parameter("topics.point_cloud.name")
             .get_parameter_value()
             .string_value
         )
-        self._point_cloud_qos_reliability = (
-            self.get_parameter("point_cloud_topic.qos_reliability")
+
+        self._params.point_cloud_topic.qos_reliability = (
+            self.get_parameter("topics.point_cloud.qos_reliability")
             .get_parameter_value()
             .string_value
+        )
+        self._params.robot_description_topic.name = (
+            self.get_parameter("topics.robot_description.name")
+            .get_parameter_value()
+            .string_value
+        )
+
+        # segmentation parameters
+        self._params.segmentation.buffer_size = (
+            self.get_parameter("segmentation.buffer_size")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.segmentation.model_type = (
+            self.get_parameter("segmentation.model_type")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.segmentation.device = (
+            self.get_parameter("segmentation.device").get_parameter_value().string_value
+        )
+        self._params.segmentation.sam_checkpoint_path = (
+            self.get_parameter("segmentation.sam_checkpoint_path")
+            .get_parameter_value()
+            .string_value
+        )
+        if not os.path.exists(self._params.segmentation.sam_checkpoint_path):
+            self.get_logger().error(
+                f"Path to SAM checkpoint does not exist: {self._params.segmentation.sam_checkpoint_path}"
+            )
+
+        # registration parameters
+        self._params.registration.convex_hull = (
+            self.get_parameter("registration.convex_hull")
+            .get_parameter_value()
+            .bool_value
+        )
+        self._params.registration.max_distance = (
+            self.get_parameter("registration.max_distance")
+            .get_parameter_value()
+            .double_value
+        )
+        self._params.registration.outer_max_iter = (
+            self.get_parameter("registration.outer_max_iter")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.registration.inner_max_iter = (
+            self.get_parameter("registration.inner_max_iter")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.registration.rmse_change = (
+            self.get_parameter("registration.rmse_change")
+            .get_parameter_value()
+            .double_value
         )
 
     def _log_parameters(self) -> None:
         self.get_logger().info(f"*** Parameters:")
-        self.get_logger().info(f"*   Sync accuracy: {self._sync_accuracy} s")
+        self.get_logger().info(f"*{' '*5}Filters:")
         self.get_logger().info(
-            f"*   Max joint velocity: {self._max_joint_velocity} rad/s"
+            f"*{' '*7}Sync accuracy: {self._params.filters.sync_accuracy} s"
         )
         self.get_logger().info(
-            f"*   Min joint position change: {self._min_joint_position_change} rad"
+            f"*{' '*7}Max joint velocity: {self._params.filters.max_joint_velocity} rad/s"
         )
-        self.get_logger().info("*   Image topic:")
-        self.get_logger().info(f"*      Name: {self._image_topic_name}")
         self.get_logger().info(
-            f"*      QoS reliability: {self._image_qos_reliability}."
+            f"*{' '*7}Min joint position change: {self._params.filters.min_joint_position_change} rad"
         )
-        self.get_logger().info(f"*   Camera info topic:")
-        self.get_logger().info(f"*      Name: {self._camera_info_topic_name}")
+        self.get_logger().info(f"*{' '*5}Topics:")
+        self.get_logger().info(f"*{' '*7}Image:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.image_topic.name}")
         self.get_logger().info(
-            f"*      QoS reliability: {self._camera_info_qos_reliability}"
+            f"*{' '*9}QoS reliability: {self._params.image_topic.qos_reliability}."
         )
-        self.get_logger().info(f"*   Joint states:")
-        self.get_logger().info(f"*      Name: {self._joint_states_topic_name}")
+        self.get_logger().info(f"*{' '*7}Camera info:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.camera_info_topic.name}")
         self.get_logger().info(
-            f"*      QoS reliability: {self._joint_states_qos_reliability}"
+            f"*{' '*9}QoS reliability: {self._params.camera_info_topic.qos_reliability}"
         )
-        self.get_logger().info(f"*   Point cloud topic:")
-        self.get_logger().info(f"*      Name: {self._point_cloud_topic_name}")
+        self.get_logger().info(f"*{' '*7}Joint states:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.joint_states_topic.name}")
         self.get_logger().info(
-            f"*      QoS reliability: {self._point_cloud_qos_reliability}"
+            f"*{' '*9}QoS reliability: {self._params.joint_states_topic.qos_reliability}"
+        )
+        self.get_logger().info(f"*{' '*7}Point cloud:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.point_cloud_topic.name}")
+        self.get_logger().info(
+            f"*{' '*9}QoS reliability: {self._params.point_cloud_topic.qos_reliability}"
+        )
+        self.get_logger().info(f"*{' '*7}Robot description:")
+        self.get_logger().info(
+            f"*{' '*9}Name: {self._params.robot_description_topic.name}"
+        )
+        self.get_logger().info(f"*{' '*5}Segmentation:")
+        self.get_logger().info(
+            f"*{' '*7}Buffer size: {self._params.segmentation.buffer_size}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Model type: {self._params.segmentation.model_type}"
+        )
+        self.get_logger().info(f"*{' '*7}Device: {self._params.segmentation.device}")
+        self.get_logger().info(
+            f"*{' '*7}SAM checkpoint path: {self._params.segmentation.sam_checkpoint_path}"
+        )
+        self.get_logger().info(f"*{' '*5}Registration:")
+        self.get_logger().info(
+            f"*{' '*7}Convex hull: {self._params.registration.convex_hull}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Max distance: {self._params.registration.max_distance}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Outer max iterations: {self._params.registration.outer_max_iter}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Inner max iterations: {self._params.registration.inner_max_iter}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}RMSE change: {self._params.registration.rmse_change}"
         )
         self.get_logger().info("***")
 
@@ -187,42 +380,41 @@ class RoboregServer(Node):
     def _create_subscriptions(self) -> None:
         qos_profile = qos_profile_system_default
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._image_qos_reliability
-        ) # override reliability from parameter
+            ReliabilityPolicy, self._params.image_topic.qos_reliability
+        )  # override reliability from parameter
         self._image_sub = Subscriber(
             self,
             Image,
-            self._image_topic_name,
+            self._params.image_topic.name,
             qos_profile=qos_profile,
         )
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._camera_info_qos_reliability
+            ReliabilityPolicy, self._params.camera_info_topic.qos_reliability
         )
         self._camera_info_sub = Subscriber(
             self,
             CameraInfo,
-            self._camera_info_topic_name,
+            self._params.camera_info_topic.name,
             qos_profile=qos_profile,
         )
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._joint_states_qos_reliability
+            ReliabilityPolicy, self._params.joint_states_topic.qos_reliability
         )
         self._joint_state_sub = Subscriber(
             self,
             JointState,
-            self._joint_states_topic_name,
+            self._params.joint_states_topic.name,
             qos_profile=qos_profile,
         )
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._point_cloud_qos_reliability
+            ReliabilityPolicy, self._params.point_cloud_topic.qos_reliability
         )
         self._point_cloud_sub = Subscriber(
             self,
             PointCloud2,
-            self._point_cloud_topic_name,
+            self._params.point_cloud_topic.name,
             qos_profile=qos_profile,
         )
-
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [
                 self._image_sub,
@@ -231,9 +423,20 @@ class RoboregServer(Node):
                 self._point_cloud_sub,
             ],
             queue_size=1,
-            slop=self._sync_accuracy,
+            slop=self._params.filters.sync_accuracy,
         )
         self._approximate_time_sync.registerCallback(self._on_sync)
+
+        # robot description
+        self._robot_description = None
+        qos_profile.reliability = ReliabilityPolicy.RELIABLE
+        qos_profile.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        self._robot_description_sub = self.create_subscription(
+            String,
+            self._params.robot_description_topic.name,
+            self._on_robot_description,
+            qos_profile=qos_profile,
+        )
 
     def _on_sync(
         self,
@@ -247,6 +450,13 @@ class RoboregServer(Node):
         self._synced_data.joint_state = joint_state
         self._synced_data.point_cloud = point_cloud
 
+    def _on_robot_description(self, msg: String) -> None:
+        self.get_logger().info("Received robot description.")
+        self._robot_description = msg.data
+        self._o3d_robot = O3DRobot(
+            self._robot_description, self._params.registration.convex_hull
+        )
+
     def _on_collect(
         self, request: CollectData.Request, response: CollectData.Response
     ) -> CollectData.Response:
@@ -258,7 +468,7 @@ class RoboregServer(Node):
         ):
             response.success = False
             response.n_collected = len(self._synced_data_list)
-            response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._sync_accuracy} s."
+            response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._params.filters.sync_accuracy} s."
             self.get_logger().warn(response.message)
             return response
 
@@ -267,11 +477,11 @@ class RoboregServer(Node):
             if np.isclose(
                 self._synced_data_list[-1].joint_state.position,
                 self._synced_data.joint_state.position,
-                atol=self._min_joint_position_change,
+                atol=self._params.filters.min_joint_position_change,
             ).all():
                 response.success = False
                 response.n_collected = len(self._synced_data_list)
-                response.message = f"Joint states did not change. Minimum joint position change: {self._min_joint_position_change} rad. Skipping data collection."
+                response.message = f"Joint states did not change. Minimum joint position change: {self._params.filters.min_joint_position_change} rad. Skipping data collection."
                 self.get_logger().warn(response.message)
                 return response
 
@@ -279,11 +489,11 @@ class RoboregServer(Node):
         if not np.isclose(
             self._synced_data.joint_state.velocity,
             np.zeros_like(self._synced_data.joint_state.velocity),
-            atol=self._max_joint_velocity,
+            atol=self._params.filters.max_joint_velocity,
         ).all():
             response.success = False
             response.n_collected = len(self._synced_data_list)
-            response.message = f"Joint states velocity greater zero. Maximum joint velocity: {self._max_joint_velocity} rad/s. This may cause un-correlated data. Skipping data collection."
+            response.message = f"Joint states velocity greater zero. Maximum joint velocity: {self._params.filters.max_joint_velocity} rad/s. This may cause un-correlated data. Skipping data collection."
             self.get_logger().warn(response.message)
             return response
 
@@ -305,6 +515,42 @@ class RoboregServer(Node):
             response.success = False
             response.message = "No data collected yet."
             return response
+        if not self._robot_description:
+            response.success = False
+            response.message = "No robot description available."
+            return response
+
+        self.get_logger().info("Detecting robot...")
+        detector = OpenCVDetector(buffer_size=self._params.segmentation.buffer_size)
+        for idx, synced_data in enumerate(self._synced_data_list):
+            image = self._bridge.imgmsg_to_cv2(
+                synced_data.image, desired_encoding="passthrough"
+            )
+            points, labels = detector.detect(image)
+            self.get_logger().info(
+                f"Annotated [{idx}/{len(self._synced_data_list)}] images"
+            )
+
+        self.get_logger().info("Instantiating SAM...")
+        segmentor = SamSegmentor(
+            checkpoint_path=self._params.segmentation.sam_checkpoint_path,
+            model_type=self._params.segmentation.model_type,
+            device=self._params.segmentation.device,
+        )
+
+        self.get_logger().info("Segmenting images...")
+        #### buffer images somehow
+
+        #### clean point cloud somehow
+
+        #### instantiate model somehow
+
+        #### run icp on model and point cloud
+
+        # def run_hydra():
+        #     pass
+
+        return response
 
     def _on_save_synced_data(
         self, request: SaveSyncedData.Request, response: SaveSyncedData.Response
@@ -318,8 +564,6 @@ class RoboregServer(Node):
         self.get_logger().info(f"Saving data to {path.absolute()}.")
 
         def write_synced_data():
-            bridge = cv_bridge.CvBridge()
-
             def point_cloud_to_numpy(
                 point_cloud: PointCloud2,
             ) -> Tuple[np.ndarray, np.ndarray]:
@@ -419,7 +663,7 @@ class RoboregServer(Node):
                     )
 
                     # convert to numpy
-                    image_np = bridge.imgmsg_to_cv2(
+                    image_np = self._bridge.imgmsg_to_cv2(
                         synced_data.image, desired_encoding="passthrough"
                     )
                     joint_position = synced_data.joint_state.position
