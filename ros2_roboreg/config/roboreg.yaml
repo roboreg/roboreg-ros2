@@ -1,9 +1,17 @@
 /**/roboreg:
   ros__parameters:
-    sync_accuracy: 1.0
+    sync_accuracy: 10.0
     min_joint_position_change: 0.001
     max_joint_velocity: 0.01
-    image_topic: /image_rect_color
-    camera_info_topic: /camera_info
-    joint_states_topic: /joint_states
-    point_cloud_topic: /point_cloud/cloud_registered
+    image_topic:
+      name: /image_rect_color
+      qos_reliability: BEST_EFFORT # loaded through getattr. From: [SYSTEM_DEFAULT, BEST_EFFORT, RELIABLE]
+    camera_info_topic:
+      name: /camera_info
+      qos_reliability: BEST_EFFORT
+    joint_states_topic:
+      name: /joint_states
+      qos_reliability: BEST_EFFORT
+    point_cloud_topic:
+      name: /point_cloud/cloud_registered
+      qos_reliability: BEST_EFFORT

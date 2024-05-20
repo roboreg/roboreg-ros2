@@ -10,6 +10,7 @@ import numpy as np
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
+from rclpy.qos import ReliabilityPolicy, qos_profile_system_default
 from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from std_srvs.srv import Trigger
 
@@ -62,14 +63,24 @@ class RoboregServer(Node):
             self.declare_parameter("min_joint_position_change", 0.001)
         if not self.has_parameter("max_joint_velocity"):
             self.declare_parameter("max_joint_velocity", 0.01)
-        if not self.has_parameter("image_topic"):
-            self.declare_parameter("image_topic", "left/image_rect_color")
-        if not self.has_parameter("camera_info_topic"):
-            self.declare_parameter("camera_info_topic", "left/camera_info")
-        if not self.has_parameter("joint_states_topic"):
-            self.declare_parameter("joint_states_topic", "joint_states")
-        if not self.has_parameter("point_cloud_topic"):
-            self.declare_parameter("point_cloud_topic", "point_cloud/cloud_registered")
+        if not self.has_parameter("image_topic.name"):
+            self.declare_parameter("image_topic.name", "left/image_rect_color")
+        if not self.has_parameter("image_topic.qos_reliability"):
+            self.declare_parameter("image_topic.qos_reliability", "reliable")
+        if not self.has_parameter("camera_info_topic.name"):
+            self.declare_parameter("camera_info_topic.name", "left/camera_info")
+        if not self.has_parameter("camera_info_topic.qos_reliability"):
+            self.declare_parameter("camera_info_topic.qos_reliability", "reliable")
+        if not self.has_parameter("joint_states_topic.name"):
+            self.declare_parameter("joint_states_topic.name", "joint_states")
+        if not self.has_parameter("joint_states_topic.qos_reliability"):
+            self.declare_parameter("joint_states_topic.qos_reliability", "reliable")
+        if not self.has_parameter("point_cloud_topic.name"):
+            self.declare_parameter(
+                "point_cloud_topic.name", "point_cloud/cloud_registered"
+            )
+        if not self.has_parameter("point_cloud_topic.qos_reliability"):
+            self.declare_parameter("point_cloud_topic.qos_reliability", "reliable")
 
     def _get_parameters(self) -> None:
         self._sync_accuracy = (
@@ -83,32 +94,74 @@ class RoboregServer(Node):
             .get_parameter_value()
             .double_value
         )
-        self._image_topic = (
-            self.get_parameter("image_topic").get_parameter_value().string_value
+        self._image_topic_name = (
+            self.get_parameter("image_topic.name").get_parameter_value().string_value
         )
-        self._camera_info_topic = (
-            self.get_parameter("camera_info_topic").get_parameter_value().string_value
+        self._image_qos_reliability = (
+            self.get_parameter("image_topic.qos_reliability")
+            .get_parameter_value()
+            .string_value
         )
-        self._joint_states_topic = (
-            self.get_parameter("joint_states_topic").get_parameter_value().string_value
+        self._camera_info_topic_name = (
+            self.get_parameter("camera_info_topic.name")
+            .get_parameter_value()
+            .string_value
         )
-        self._point_cloud_topic = (
-            self.get_parameter("point_cloud_topic").get_parameter_value().string_value
+        self._camera_info_qos_reliability = (
+            self.get_parameter("camera_info_topic.qos_reliability")
+            .get_parameter_value()
+            .string_value
+        )
+        self._joint_states_topic_name = (
+            self.get_parameter("joint_states_topic.name")
+            .get_parameter_value()
+            .string_value
+        )
+        self._joint_states_qos_reliability = (
+            self.get_parameter("joint_states_topic.qos_reliability")
+            .get_parameter_value()
+            .string_value
+        )
+        self._point_cloud_topic_name = (
+            self.get_parameter("point_cloud_topic.name")
+            .get_parameter_value()
+            .string_value
+        )
+        self._point_cloud_qos_reliability = (
+            self.get_parameter("point_cloud_topic.qos_reliability")
+            .get_parameter_value()
+            .string_value
         )
 
     def _log_parameters(self) -> None:
         self.get_logger().info(f"*** Parameters:")
-        self.get_logger().info(f"*   Sync accuracy: {self._sync_accuracy} s.")
+        self.get_logger().info(f"*   Sync accuracy: {self._sync_accuracy} s")
         self.get_logger().info(
-            f"*   Max joint velocity: {self._max_joint_velocity} rad/s."
+            f"*   Max joint velocity: {self._max_joint_velocity} rad/s"
         )
         self.get_logger().info(
-            f"*   Min joint position change: {self._min_joint_position_change} rad."
+            f"*   Min joint position change: {self._min_joint_position_change} rad"
         )
-        self.get_logger().info(f"*   Image topic: {self._image_topic}.")
-        self.get_logger().info(f"*   Camera info topic: {self._camera_info_topic}.")
-        self.get_logger().info(f"*   Joint states topic: {self._joint_states_topic}.")
-        self.get_logger().info(f"*   Point cloud topic: {self._point_cloud_topic}.")
+        self.get_logger().info("*   Image topic:")
+        self.get_logger().info(f"*      Name: {self._image_topic_name}")
+        self.get_logger().info(
+            f"*      QoS reliability: {self._image_qos_reliability}."
+        )
+        self.get_logger().info(f"*   Camera info topic:")
+        self.get_logger().info(f"*      Name: {self._camera_info_topic_name}")
+        self.get_logger().info(
+            f"*      QoS reliability: {self._camera_info_qos_reliability}"
+        )
+        self.get_logger().info(f"*   Joint states:")
+        self.get_logger().info(f"*      Name: {self._joint_states_topic_name}")
+        self.get_logger().info(
+            f"*      QoS reliability: {self._joint_states_qos_reliability}"
+        )
+        self.get_logger().info(f"*   Point cloud topic:")
+        self.get_logger().info(f"*      Name: {self._point_cloud_topic_name}")
+        self.get_logger().info(
+            f"*      QoS reliability: {self._point_cloud_qos_reliability}"
+        )
         self.get_logger().info("***")
 
     def _create_services(self) -> None:
@@ -132,10 +185,43 @@ class RoboregServer(Node):
         )
 
     def _create_subscriptions(self) -> None:
-        self._image_sub = Subscriber(self, Image, self._image_topic)
-        self._camera_info_sub = Subscriber(self, CameraInfo, self._camera_info_topic)
-        self._joint_state_sub = Subscriber(self, JointState, self._joint_states_topic)
-        self._point_cloud_sub = Subscriber(self, PointCloud2, self._point_cloud_topic)
+        qos_profile = qos_profile_system_default
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._image_qos_reliability
+        ) # override reliability from parameter
+        self._image_sub = Subscriber(
+            self,
+            Image,
+            self._image_topic_name,
+            qos_profile=qos_profile,
+        )
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._camera_info_qos_reliability
+        )
+        self._camera_info_sub = Subscriber(
+            self,
+            CameraInfo,
+            self._camera_info_topic_name,
+            qos_profile=qos_profile,
+        )
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._joint_states_qos_reliability
+        )
+        self._joint_state_sub = Subscriber(
+            self,
+            JointState,
+            self._joint_states_topic_name,
+            qos_profile=qos_profile,
+        )
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._point_cloud_qos_reliability
+        )
+        self._point_cloud_sub = Subscriber(
+            self,
+            PointCloud2,
+            self._point_cloud_topic_name,
+            qos_profile=qos_profile,
+        )
 
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [
