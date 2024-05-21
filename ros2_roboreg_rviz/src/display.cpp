@@ -8,14 +8,14 @@ void Display::onInitialize() {
   auto widget = new QWidget();
   auto collect_data_widget = new CollectDataWidget(node_ptr_, widget);
   auto register_widget = new RegisterWidget(node_ptr_, widget);
-  auto save_synced_data_widget = new SaveSyncedDataWidget(node_ptr_, widget);
+  auto save_data_widget = new SaveDataWidget(node_ptr_, widget);
   setAssociatedWidget(widget);
 
   // set layout
   auto layout = new QVBoxLayout(widget);
   layout->addWidget(collect_data_widget);
   layout->addWidget(register_widget);
-  layout->addWidget(save_synced_data_widget);
+  layout->addWidget(save_data_widget);
 }
 } // end of namespace ros2_roboreg_rviz
 

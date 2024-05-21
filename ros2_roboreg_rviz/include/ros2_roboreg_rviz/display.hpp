@@ -13,7 +13,7 @@
 
 #include "ros2_roboreg_rviz/collect_data_widget.hpp"
 #include "ros2_roboreg_rviz/register_widget.hpp"
-#include "ros2_roboreg_rviz/save_synced_data_widget.hpp"
+#include "ros2_roboreg_rviz/save_data_widget.hpp"
 
 namespace ros2_roboreg_rviz {
 class Display : public rviz_common::Display {
@@ -24,8 +24,6 @@ public:
 
 protected:
   rclcpp::Node::SharedPtr node_ptr_;
-
-  rclcpp::Client<ros2_roboreg_idl::srv::SaveSyncedData>::SharedPtr save_synced_data_client_ptr_;
 };
 } // end of namespace ros2_roboreg_rviz
 #endif // ROS2_ROBOREG_RVIZ__DISPLAY_HPP_

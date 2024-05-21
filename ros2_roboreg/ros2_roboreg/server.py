@@ -22,7 +22,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 from ros2_roboreg.broadcaster import StaticTFBroadcaster
-from ros2_roboreg_idl.srv import CollectData, SaveSyncedData
+from ros2_roboreg_idl.srv import CollectData, SaveData
 
 
 @dataclass
@@ -136,7 +136,7 @@ class RoboregServer(Node):
         self._bridge = cv_bridge.CvBridge()
 
         # tf broadcaster
-        self._HT = None
+        self._HT = np.eye(4)
         self._tf_broadcaster = StaticTFBroadcaster(self)
 
         # parameters
@@ -445,16 +445,16 @@ class RoboregServer(Node):
         self._register_service = self.create_service(
             Trigger, "~/register", self._on_register
         )
-        self._save_synced_data_service = self.create_service(
-            SaveSyncedData,
-            "~/save_synced_data",
-            self._on_save_synced_data,
+        self._save_data_service = self.create_service(
+            SaveData,
+            "~/save_data",
+            self._on_save_data,
             callback_group=callback_group,
         )
         self._transform_service = self.create_service(
             Trigger,
-            "~/send_transform",
-            self._on_send_transform,
+            "~/publish_transformm",
+            self._on_publish_transformm,
             callback_group=callback_group,
         )
 
@@ -777,9 +777,9 @@ class RoboregServer(Node):
 
         return np.stack([x, y, z], axis=-1), rgba
 
-    def _on_save_synced_data(
-        self, request: SaveSyncedData.Request, response: SaveSyncedData.Response
-    ) -> SaveSyncedData.Response:
+    def _on_save_data(
+        self, request: SaveData.Request, response: SaveData.Response
+    ) -> SaveData.Response:
         try:
             if len(self._synced_data_list) == 0:
                 response.success = False
@@ -909,12 +909,12 @@ class RoboregServer(Node):
             self.get_logger().error(response.message)
         return response
 
-    def _on_send_transform(
+    def _on_publish_transformm(
         self, request: Trigger.Request, response: Trigger.Response
     ) -> Trigger.Response:
         response.success = True
         try:
-            self._tf_broadcaster.send_transform(
+            self._tf_broadcaster.publish_transformm(
                 self._HT,
                 parent=self._params.tf_broadcaster.parent_frame,
                 child=self._params.tf_broadcaster.child_frame,

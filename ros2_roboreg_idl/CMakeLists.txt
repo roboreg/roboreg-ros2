@@ -15,7 +15,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/CollectData.srv"
-  "srv/SaveSyncedData.srv"
+  "srv/SaveData.srv"
 )
 
 ament_package()

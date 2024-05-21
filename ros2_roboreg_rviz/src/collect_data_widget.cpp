@@ -25,6 +25,6 @@ void CollectDataWidget::onCollectData_() {
                  collect_data_client_ptr_->get_service_name());
     return;
   }
-  RCLCPP_INFO(node_ptr_->get_logger(), "Collecting data...");
+  ros2_roboreg_idl::srv::CollectData::Request request;
 }
 } // end of namespace ros2_roboreg_rviz

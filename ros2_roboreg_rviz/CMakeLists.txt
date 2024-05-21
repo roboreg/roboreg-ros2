@@ -31,7 +31,7 @@ add_library(
   src/collect_data_widget.cpp
   src/display.cpp
   src/register_widget.cpp
-  src/save_synced_data_widget.cpp
+  src/save_data_widget.cpp
 )
 
 target_include_directories(
