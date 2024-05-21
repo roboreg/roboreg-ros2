@@ -36,3 +36,8 @@
       outer_max_iter: 100
       inner_max_iter: 3
       rmse_change: 1.0e-6
+
+    tf_broadcaster:
+      parent_frame: world
+      child_frame: camera_frame
+      target_child_frame: camera_link

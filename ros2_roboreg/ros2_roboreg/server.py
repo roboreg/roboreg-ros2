@@ -11,8 +11,7 @@ import torch
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
-from rclpy.qos import (DurabilityPolicy, ReliabilityPolicy,
-                       qos_profile_system_default)
+from rclpy.qos import DurabilityPolicy, ReliabilityPolicy, qos_profile_system_default
 from roboreg.detector import OpenCVDetector
 from roboreg.hydra_icp import hydra_centroid_alignment, hydra_robust_icp
 from roboreg.o3d_robot import O3DRobot
@@ -22,6 +21,7 @@ from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
+from ros2_roboreg.broadcaster import StaticTFBroadcaster
 from ros2_roboreg_idl.srv import CollectData, SaveSyncedData
 
 
@@ -110,6 +110,18 @@ class ServerParams:
         self.robot_description_topic = self._TopicParam()
         self.segmentation = self._SegmentationParams()
         self.registration = self._RegistrationParams()
+        self.tf_broadcaster = self.TFParams()
+
+    @dataclass
+    class TFParams:
+        parent_frame: str
+        child_frame: str
+        target_child_frame: str
+
+        def __init__(self) -> None:
+            self.parent_frame = "world"
+            self.child_frame = ""
+            self.target_child_frame = ""
 
 
 class RoboregServer(Node):
@@ -122,6 +134,10 @@ class RoboregServer(Node):
 
         # opencv bridge
         self._bridge = cv_bridge.CvBridge()
+
+        # tf broadcaster
+        self._HT = None
+        self._tf_broadcaster = StaticTFBroadcaster(self)
 
         # parameters
         self._params = ServerParams()
@@ -178,6 +194,14 @@ class RoboregServer(Node):
                 ("registration.outer_max_iter", 100),
                 ("registration.inner_max_iter", 3),
                 ("registration.rmse_change", 1.0e-6),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("tf_broadcaster.parent_frame", "world"),
+                ("tf_broadcaster.child_frame", ""),
+                ("tf_broadcaster.target_child_frame", ""),
             ],
         )
 
@@ -309,6 +333,21 @@ class RoboregServer(Node):
             .get_parameter_value()
             .double_value
         )
+        self._params.tf_broadcaster.parent_frame = (
+            self.get_parameter("tf_broadcaster.parent_frame")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.tf_broadcaster.child_frame = (
+            self.get_parameter("tf_broadcaster.child_frame")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.tf_broadcaster.target_child_frame = (
+            self.get_parameter("tf_broadcaster.target_child_frame")
+            .get_parameter_value()
+            .string_value
+        )
 
     def _log_parameters(self) -> None:
         self.get_logger().info(f"*** Parameters:")
@@ -381,25 +420,41 @@ class RoboregServer(Node):
         self.get_logger().info(
             f"*{' '*7}RMSE change: {self._params.registration.rmse_change}"
         )
+        self.get_logger().info(f"*{' '*5}TF broadcaster:")
+        self.get_logger().info(
+            f"*{' '*7}Parent frame: {self._params.tf_broadcaster.parent_frame}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Child frame: {self._params.tf_broadcaster.child_frame}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Target child frame: {self._params.tf_broadcaster.target_child_frame}"
+        )
         self.get_logger().info("***")
 
     def _create_services(self) -> None:
         # callback group
         callback_group = MutuallyExclusiveCallbackGroup()
 
-        self.collect_service = self.create_service(
+        self._collect_service = self.create_service(
             CollectData,
             "~/collect_data",
             self._on_collect,
             callback_group=callback_group,
         )
-        self.register_service = self.create_service(
+        self._register_service = self.create_service(
             Trigger, "~/register", self._on_register
         )
-        self.save_synced_data_service = self.create_service(
+        self._save_synced_data_service = self.create_service(
             SaveSyncedData,
             "~/save_synced_data",
             self._on_save_synced_data,
+            callback_group=callback_group,
+        )
+        self._transform_service = self.create_service(
+            Trigger,
+            "~/send_transform",
+            self._on_send_transform,
             callback_group=callback_group,
         )
 
@@ -486,52 +541,56 @@ class RoboregServer(Node):
     def _on_collect(
         self, request: CollectData.Request, response: CollectData.Response
     ) -> CollectData.Response:
-        if (
-            self._synced_data.image is None
-            or self._synced_data.camera_info is None
-            or self._synced_data.joint_states is None
-            or self._synced_data.point_cloud is None
-        ):
-            response.success = False
-            response.n_collected = len(self._synced_data_list)
-            response.message = f"No data available yet. Topics might be wrongly configured. Data might not be synchronized, accuracy: {self._params.filters.sync_accuracy} s."
-            self.get_logger().warn(response.message)
-            return response
-
-        # check if joint states changed from last data
-        if len(self._synced_data_list) > 1:
-            if np.isclose(
-                self._synced_data_list[-1].joint_states.position,
-                self._synced_data.joint_states.position,
-                atol=self._params.filters.min_joint_position_change,
-            ).all():
+        try:
+            if (
+                self._synced_data.image is None
+                or self._synced_data.camera_info is None
+                or self._synced_data.joint_states is None
+                or self._synced_data.point_cloud is None
+            ):
                 response.success = False
                 response.n_collected = len(self._synced_data_list)
-                response.message = f"Joint states did not change. Minimum joint position change: {self._params.filters.min_joint_position_change} rad. Skipping data collection."
+                response.message = f"No data available yet. Topics might be wrongly configured. Data might not be synchronized, accuracy: {self._params.filters.sync_accuracy} s."
                 self.get_logger().warn(response.message)
                 return response
 
-        # only allow joint states velocities close to zero
-        if not np.isclose(
-            self._synced_data.joint_states.velocity,
-            np.zeros_like(self._synced_data.joint_states.velocity),
-            atol=self._params.filters.max_joint_velocity,
-        ).all():
+            # check if joint states changed from last data
+            if len(self._synced_data_list) > 1:
+                if np.isclose(
+                    self._synced_data_list[-1].joint_states.position,
+                    self._synced_data.joint_states.position,
+                    atol=self._params.filters.min_joint_position_change,
+                ).all():
+                    response.success = False
+                    response.n_collected = len(self._synced_data_list)
+                    response.message = f"Joint states did not change. Minimum joint position change: {self._params.filters.min_joint_position_change} rad. Skipping data collection."
+                    self.get_logger().warn(response.message)
+                    return response
+
+            # only allow joint states velocities close to zero
+            if not np.isclose(
+                self._synced_data.joint_states.velocity,
+                np.zeros_like(self._synced_data.joint_states.velocity),
+                atol=self._params.filters.max_joint_velocity,
+            ).all():
+                response.success = False
+                response.n_collected = len(self._synced_data_list)
+                response.message = f"Joint states velocity greater zero. Maximum joint velocity: {self._params.filters.max_joint_velocity} rad/s. This may cause un-correlated data. Skipping data collection."
+                self.get_logger().warn(response.message)
+                return response
+
+            # add data
+            self._synced_data_list.append(copy.deepcopy(self._synced_data))
+            response.success = True
+            response.n_collected = len(self._synced_data_list)
+            response.message = f"Added data with time stamp: {self._synced_data.joint_states.header.stamp}"
+            self.get_logger().info(response.message)
+            self._synced_data.clear()
+        except Exception as e:
             response.success = False
             response.n_collected = len(self._synced_data_list)
-            response.message = f"Joint states velocity greater zero. Maximum joint velocity: {self._params.filters.max_joint_velocity} rad/s. This may cause un-correlated data. Skipping data collection."
-            self.get_logger().warn(response.message)
-            return response
-
-        # add data
-        self._synced_data_list.append(copy.deepcopy(self._synced_data))
-        response.success = True
-        response.n_collected = len(self._synced_data_list)
-        response.message = (
-            f"Added data with time stamp: {self._synced_data.joint_states.header.stamp}"
-        )
-        self.get_logger().info(response.message)
-        self._synced_data.clear()
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
         return response
 
     def _on_register(
@@ -657,21 +716,14 @@ class RoboregServer(Node):
                 outer_max_iter=self._params.registration.outer_max_iter,
                 inner_max_iter=self._params.registration.inner_max_iter,
             )
+            self._HT = HT.cpu().numpy()
+            response.success = True
+            response.message = "Registration successful"
+            self.get_logger().info(response.message)
         except Exception as e:
             response.success = False
             response.message = f"Failed service call with: {e}"
             self.get_logger().error(response.message)
-
-        #### buffer images somehow
-
-        #### clean point cloud somehow
-
-        #### instantiate model somehow
-
-        #### run icp on model and point cloud
-
-        # def run_hydra():
-        #     pass
 
         return response
 
@@ -728,126 +780,148 @@ class RoboregServer(Node):
     def _on_save_synced_data(
         self, request: SaveSyncedData.Request, response: SaveSyncedData.Response
     ) -> SaveSyncedData.Response:
-        if len(self._synced_data_list) == 0:
+        try:
+            if len(self._synced_data_list) == 0:
+                response.success = False
+                response.message = "No data collected yet"
+                return response
+
+            path = pathlib.Path(request.path)
+            self.get_logger().info(f"Saving data to {path.absolute()}")
+
+            def write_synced_data():
+                def write_camera_info_to_yaml(camera_info_msg: CameraInfo, path: str):
+                    import yaml
+
+                    camera_info = {
+                        "width": camera_info_msg.width,
+                        "height": camera_info_msg.height,
+                        "frame_id": camera_info_msg.header.frame_id,
+                        "camera_matrix": {
+                            "rows": 3,
+                            "cols": 3,
+                            "data": camera_info_msg.k.tolist(),
+                        },
+                        "distortion_model": camera_info_msg.distortion_model,
+                        "distortion_coefficients": {
+                            "rows": 1,
+                            "cols": 5,
+                            "data": camera_info_msg.d.tolist(),
+                        },
+                        "rectification_matrix": {
+                            "rows": 3,
+                            "cols": 3,
+                            "data": camera_info_msg.r.tolist(),
+                        },
+                        "projection_matrix": {
+                            "rows": 3,
+                            "cols": 4,
+                            "data": camera_info_msg.p.tolist(),
+                        },
+                    }
+
+                    with open(path, "w") as f:
+                        yaml.dump(camera_info, f)
+
+                # save camera info
+                write_camera_info_to_yaml(
+                    self._synced_data_list[0].camera_info,
+                    os.path.join(path, "camera_info.yaml"),
+                )
+
+                # log time stamps to csv
+                with open(os.path.join(path, "time_stamps.csv"), "w") as f:
+                    f.write("idx,sec,nanosec\n")
+
+                    for idx, synced_data in enumerate(self._synced_data_list):
+                        # log time stamps
+                        f.write(
+                            f"{idx},{synced_data.joint_states.header.stamp.sec},{synced_data.joint_states.header.stamp.nanosec}\n"
+                        )
+
+                        # convert to numpy
+                        image_np = self._bridge.imgmsg_to_cv2(
+                            synced_data.image, desired_encoding="passthrough"
+                        )
+                        joint_position = synced_data.joint_states.position
+                        name = synced_data.joint_states.name
+                        joint_position = [
+                            x for _, x in sorted(zip(name, joint_position))
+                        ]
+                        joint_position_np = np.array(joint_position)
+                        xyz_np, rgba_np = self._point_cloud_to_numpy(
+                            synced_data.point_cloud
+                        )
+
+                        # save
+                        cv2.imwrite(
+                            os.path.join(path, f"image_{idx}.png"),
+                            image_np,
+                        )
+                        np.save(
+                            os.path.join(path, f"joint_states_{idx}.npy"),
+                            joint_position_np,
+                        )
+                        np.save(
+                            os.path.join(path, f"xyz_{idx}.npy"),
+                            xyz_np,
+                        )
+                        np.save(
+                            os.path.join(path, f"rgba_{idx}.npy"),
+                            rgba_np,
+                        )
+                self._synced_data_list.clear()
+
+            if path.exists():
+                try:
+                    write_synced_data()
+                except Exception as e:
+                    response.success = False
+                    response.message = f"Could not write data to {path.absolute()}"
+                    self.get_logger().error(response.message)
+                    self.get_logger().error(e)
+                    return response
+                response.success = True
+                response.message = f"Wrote data to {path.absolute()}"
+                return response
+
+            if request.mkdir:
+                path.mkdir(parents=True, exist_ok=True)
+                try:
+                    write_synced_data()
+                except Exception as e:
+                    response.success = False
+                    response.message = f"Could not write data to {path.absolute()}"
+                    self.get_logger().error(response.message)
+                    self.get_logger().error(e)
+                    return response
+                response.success = True
+                response.message = (
+                    f"Created directory {path.absolute()} and wrote data to it"
+                )
+                return response
+
             response.success = False
-            response.message = "No data collected yet"
-            return response
+            response.message = f"Path {path.absolute()} does not exist and was not created as per request"
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
+        return response
 
-        path = pathlib.Path(request.path)
-        self.get_logger().info(f"Saving data to {path.absolute()}")
-
-        def write_synced_data():
-            def write_camera_info_to_yaml(camera_info_msg: CameraInfo, path: str):
-                import yaml
-
-                camera_info = {
-                    "width": camera_info_msg.width,
-                    "height": camera_info_msg.height,
-                    "frame_id": camera_info_msg.header.frame_id,
-                    "camera_matrix": {
-                        "rows": 3,
-                        "cols": 3,
-                        "data": camera_info_msg.k.tolist(),
-                    },
-                    "distortion_model": camera_info_msg.distortion_model,
-                    "distortion_coefficients": {
-                        "rows": 1,
-                        "cols": 5,
-                        "data": camera_info_msg.d.tolist(),
-                    },
-                    "rectification_matrix": {
-                        "rows": 3,
-                        "cols": 3,
-                        "data": camera_info_msg.r.tolist(),
-                    },
-                    "projection_matrix": {
-                        "rows": 3,
-                        "cols": 4,
-                        "data": camera_info_msg.p.tolist(),
-                    },
-                }
-
-                with open(path, "w") as f:
-                    yaml.dump(camera_info, f)
-
-            # save camera info
-            write_camera_info_to_yaml(
-                self._synced_data_list[0].camera_info,
-                os.path.join(path, "camera_info.yaml"),
+    def _on_send_transform(
+        self, request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
+        response.success = True
+        try:
+            self._tf_broadcaster.send_transform(
+                self._HT,
+                parent=self._params.tf_broadcaster.parent_frame,
+                child=self._params.tf_broadcaster.child_frame,
+                target_child=self._params.tf_broadcaster.target_child_frame,
             )
-
-            # log time stamps to csv
-            with open(os.path.join(path, "time_stamps.csv"), "w") as f:
-                f.write("idx,sec,nanosec\n")
-
-                for idx, synced_data in enumerate(self._synced_data_list):
-                    # log time stamps
-                    f.write(
-                        f"{idx},{synced_data.joint_states.header.stamp.sec},{synced_data.joint_states.header.stamp.nanosec}\n"
-                    )
-
-                    # convert to numpy
-                    image_np = self._bridge.imgmsg_to_cv2(
-                        synced_data.image, desired_encoding="passthrough"
-                    )
-                    joint_position = synced_data.joint_states.position
-                    name = synced_data.joint_states.name
-                    joint_position = [x for _, x in sorted(zip(name, joint_position))]
-                    joint_position_np = np.array(joint_position)
-                    xyz_np, rgba_np = self._point_cloud_to_numpy(
-                        synced_data.point_cloud
-                    )
-
-                    # save
-                    cv2.imwrite(
-                        os.path.join(path, f"image_{idx}.png"),
-                        image_np,
-                    )
-                    np.save(
-                        os.path.join(path, f"joint_states_{idx}.npy"),
-                        joint_position_np,
-                    )
-                    np.save(
-                        os.path.join(path, f"xyz_{idx}.npy"),
-                        xyz_np,
-                    )
-                    np.save(
-                        os.path.join(path, f"rgba_{idx}.npy"),
-                        rgba_np,
-                    )
-            self._synced_data_list.clear()
-
-        if path.exists():
-            try:
-                write_synced_data()
-            except Exception as e:
-                response.success = False
-                response.message = f"Could not write data to {path.absolute()}"
-                self.get_logger().error(response.message)
-                self.get_logger().error(e)
-                return response
-            response.success = True
-            response.message = f"Wrote data to {path.absolute()}"
-            return response
-
-        if request.mkdir:
-            path.mkdir(parents=True, exist_ok=True)
-            try:
-                write_synced_data()
-            except Exception as e:
-                response.success = False
-                response.message = f"Could not write data to {path.absolute()}"
-                self.get_logger().error(response.message)
-                self.get_logger().error(e)
-                return response
-            response.success = True
-            response.message = (
-                f"Created directory {path.absolute()} and wrote data to it"
-            )
-            return response
-
-        response.success = False
-        response.message = (
-            f"Path {path.absolute()} does not exist and was not created as per request"
-        )
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
         return response

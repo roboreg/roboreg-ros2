@@ -1,6 +1,6 @@
 import rclpy
 
-from ros2_roboreg import RoboregServer
+from ros2_roboreg.server import RoboregServer
 
 
 def main() -> None:

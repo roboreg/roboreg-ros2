@@ -24,7 +24,7 @@ setup(
     entry_points={
         "console_scripts": [
             "roboreg = scripts.roboreg_node:main",
-            "static_tf_broadcaster = scripts.static_tf_broadcaster:main",
+            "broadcaster = scripts.broadcaster:main",
         ],
     },
 )
