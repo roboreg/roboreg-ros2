@@ -28,7 +28,10 @@
       sam_checkpoint_path: ""
 
     registration:
+      erosion_kernel_size: 10
       convex_hull: True
+      number_of_points: 5000
+      device: cuda
       max_distance: 0.1
       outer_max_iter: 100
       inner_max_iter: 3

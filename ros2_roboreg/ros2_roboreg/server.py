@@ -7,20 +7,17 @@ from typing import List, Tuple
 import cv2
 import cv_bridge
 import numpy as np
+import torch
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
-from rclpy.qos import (
-    DurabilityPolicy,
-    ReliabilityPolicy,
-    qos_profile_system_default,
-)
-
+from rclpy.qos import (DurabilityPolicy, ReliabilityPolicy,
+                       qos_profile_system_default)
 from roboreg.detector import OpenCVDetector
 from roboreg.hydra_icp import hydra_centroid_alignment, hydra_robust_icp
 from roboreg.o3d_robot import O3DRobot
 from roboreg.segmentor import SamSegmentor
-
+from roboreg.util import clean_xyz, mask_boundary
 from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
@@ -32,19 +29,19 @@ from ros2_roboreg_idl.srv import CollectData, SaveSyncedData
 class SyncedData:
     image: Image
     camera_info: CameraInfo
-    joint_state: JointState
+    joint_states: JointState
     point_cloud: PointCloud2
 
     def __init__(self) -> None:
         self.image = None
         self.camera_info = None
-        self.joint_state = None
+        self.joint_states = None
         self.point_cloud = None
 
     def clear(self) -> None:
         self.image = None
         self.camera_info = None
-        self.joint_state = None
+        self.joint_states = None
         self.point_cloud = None
 
 
@@ -84,14 +81,20 @@ class ServerParams:
 
     @dataclass
     class _RegistrationParams:
+        erosion_kernel_size: int
         convex_hull: bool
+        number_of_points: int
+        device: str
         max_distance: float
         outer_max_iter: int
         inner_max_iter: int
         rmse_change: float
 
         def __init__(self) -> None:
+            self.erosion_kernel_size = 10
             self.convex_hull = False
+            self.number_of_points = 5000
+            self.device = "cuda"
             self.max_distance = 0.1
             self.outer_max_iter = 100
             self.inner_max_iter = 3
@@ -167,7 +170,10 @@ class RoboregServer(Node):
         self.declare_parameters(
             namespace="",
             parameters=[
+                ("registration.erosion_kernel_size", 10),
                 ("registration.convex_hull", False),
+                ("registration.number_of_points", 5000),
+                ("registration.device", "cuda"),
                 ("registration.max_distance", 0.1),
                 ("registration.outer_max_iter", 100),
                 ("registration.inner_max_iter", 3),
@@ -265,10 +271,23 @@ class RoboregServer(Node):
             )
 
         # registration parameters
+        self._params.registration.erosion_kernel_size = (
+            self.get_parameter("registration.erosion_kernel_size")
+            .get_parameter_value()
+            .integer_value
+        )
         self._params.registration.convex_hull = (
             self.get_parameter("registration.convex_hull")
             .get_parameter_value()
             .bool_value
+        )
+        self._params.registration.number_of_points = (
+            self.get_parameter("registration.number_of_points")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.registration.device = (
+            self.get_parameter("registration.device").get_parameter_value().string_value
         )
         self._params.registration.max_distance = (
             self.get_parameter("registration.max_distance")
@@ -341,8 +360,15 @@ class RoboregServer(Node):
         )
         self.get_logger().info(f"*{' '*5}Registration:")
         self.get_logger().info(
+            f"*{' '*7}Erosion kernel size: {self._params.registration.erosion_kernel_size}"
+        )
+        self.get_logger().info(
             f"*{' '*7}Convex hull: {self._params.registration.convex_hull}"
         )
+        self.get_logger().info(
+            f"*{' '*7}Number of points: {self._params.registration.number_of_points}"
+        )
+        self.get_logger().info(f"*{' '*7}Device: {self._params.registration.device}")
         self.get_logger().info(
             f"*{' '*7}Max distance: {self._params.registration.max_distance}"
         )
@@ -442,12 +468,12 @@ class RoboregServer(Node):
         self,
         image: Image,
         camera_info: CameraInfo,
-        joint_state: JointState,
+        joint_states: JointState,
         point_cloud: PointCloud2,
     ):
         self._synced_data.image = image
         self._synced_data.camera_info = camera_info
-        self._synced_data.joint_state = joint_state
+        self._synced_data.joint_states = joint_states
         self._synced_data.point_cloud = point_cloud
 
     def _on_robot_description(self, msg: String) -> None:
@@ -463,20 +489,20 @@ class RoboregServer(Node):
         if (
             self._synced_data.image is None
             or self._synced_data.camera_info is None
-            or self._synced_data.joint_state is None
+            or self._synced_data.joint_states is None
             or self._synced_data.point_cloud is None
         ):
             response.success = False
             response.n_collected = len(self._synced_data_list)
-            response.message = f"No data available yet. Data might not be synchronized. Synchronization accuracy: {self._params.filters.sync_accuracy} s."
+            response.message = f"No data available yet. Topics might be wrongly configured. Data might not be synchronized, accuracy: {self._params.filters.sync_accuracy} s."
             self.get_logger().warn(response.message)
             return response
 
         # check if joint states changed from last data
         if len(self._synced_data_list) > 1:
             if np.isclose(
-                self._synced_data_list[-1].joint_state.position,
-                self._synced_data.joint_state.position,
+                self._synced_data_list[-1].joint_states.position,
+                self._synced_data.joint_states.position,
                 atol=self._params.filters.min_joint_position_change,
             ).all():
                 response.success = False
@@ -487,8 +513,8 @@ class RoboregServer(Node):
 
         # only allow joint states velocities close to zero
         if not np.isclose(
-            self._synced_data.joint_state.velocity,
-            np.zeros_like(self._synced_data.joint_state.velocity),
+            self._synced_data.joint_states.velocity,
+            np.zeros_like(self._synced_data.joint_states.velocity),
             atol=self._params.filters.max_joint_velocity,
         ).all():
             response.success = False
@@ -502,7 +528,7 @@ class RoboregServer(Node):
         response.success = True
         response.n_collected = len(self._synced_data_list)
         response.message = (
-            f"Added data with time stamp: {self._synced_data.joint_state.header.stamp}"
+            f"Added data with time stamp: {self._synced_data.joint_states.header.stamp}"
         )
         self.get_logger().info(response.message)
         self._synced_data.clear()
@@ -513,32 +539,129 @@ class RoboregServer(Node):
     ) -> Trigger.Response:
         if len(self._synced_data_list) == 0:
             response.success = False
-            response.message = "No data collected yet."
+            response.message = "No data collected yet"
             return response
         if not self._robot_description:
             response.success = False
-            response.message = "No robot description available."
+            response.message = "No robot description available"
+            return response
+        if not os.path.exists(self._params.segmentation.sam_checkpoint_path):
+            response.success = False
+            response.message = f"Path to SAM checkpoint does not exist: {self._params.segmentation.sam_checkpoint_path}"
+            self.get_logger().error(response.message)
             return response
 
-        self.get_logger().info("Detecting robot...")
-        detector = OpenCVDetector(buffer_size=self._params.segmentation.buffer_size)
-        for idx, synced_data in enumerate(self._synced_data_list):
-            image = self._bridge.imgmsg_to_cv2(
-                synced_data.image, desired_encoding="passthrough"
-            )
-            points, labels = detector.detect(image)
-            self.get_logger().info(
-                f"Annotated [{idx}/{len(self._synced_data_list)}] images"
-            )
+        try:
 
-        self.get_logger().info("Instantiating SAM...")
-        segmentor = SamSegmentor(
-            checkpoint_path=self._params.segmentation.sam_checkpoint_path,
-            model_type=self._params.segmentation.model_type,
-            device=self._params.segmentation.device,
-        )
+            def detect_and_segment():
+                masks = []
 
-        self.get_logger().info("Segmenting images...")
+                # segment the images
+                detector = OpenCVDetector(
+                    buffer_size=self._params.segmentation.buffer_size
+                )
+                self.get_logger().info(
+                    f"Loading SAM model from {self._params.segmentation.sam_checkpoint_path}"
+                )
+                segmentor = SamSegmentor(
+                    sam_checkpoint=self._params.segmentation.sam_checkpoint_path,
+                    model_type=self._params.segmentation.model_type,
+                    device=self._params.segmentation.device,
+                )
+                self.get_logger().info("Segmentation model loaded")
+                self.get_logger().info("Segmenting robot...")
+                for idx, synced_data in enumerate(self._synced_data_list):
+                    image = self._bridge.imgmsg_to_cv2(
+                        synced_data.image, desired_encoding="bgr8"
+                    )
+                    points, labels = detector.detect(image)
+                    detector.clear()
+                    self.get_logger().info(
+                        f"Annotated [{idx+1}/{len(self._synced_data_list)}] images"
+                    )
+                    mask = segmentor(image, np.array(points), np.array(labels))
+                    masks.append((mask * 255.0).astype(np.uint8))
+                self.get_logger().info("Segmentation done")
+
+                # delete model from gpu
+                del segmentor
+                torch.cuda.empty_cache()
+                return masks
+
+            # remove segmentor from gpu
+            masks = detect_and_segment()
+
+            # prepare point clouds
+            masks = [
+                mask_boundary(
+                    mask,
+                    np.ones(
+                        [
+                            self._params.registration.erosion_kernel_size,
+                            self._params.registration.erosion_kernel_size,
+                        ]
+                    ),
+                )
+                for mask in masks
+            ]
+            self.get_logger().info("Preparing point clouds and meshes...")
+            observed_xyzs = []
+            mesh_xyzs = []
+            mesh_xyzs_normals = []
+            for synced_data, mask in zip(self._synced_data_list, masks):
+                # extract xyz from point cloud and clean data
+                observed_xyz, _ = self._point_cloud_to_numpy(synced_data.point_cloud)
+                observed_xyzs.append(clean_xyz(observed_xyz, mask))
+
+                # transform mesh according to joint state
+                mesh_xyz = None
+                mesh_xyz_normals = None
+
+                self._o3d_robot.set_joint_positions(
+                    np.array(synced_data.joint_states.position)
+                )
+                pcds = self._o3d_robot.sample_point_clouds_equally(
+                    number_of_points=self._params.registration.number_of_points
+                )
+                mesh_xyz = np.concatenate([np.array(pcd.points) for pcd in pcds])
+                mesh_xyz_normals = np.concatenate(
+                    [np.array(pcd.normals) for pcd in pcds]
+                )
+                mesh_xyzs.append(mesh_xyz)
+                mesh_xyzs_normals.append(mesh_xyz_normals)
+
+            # delete masks from gpu
+            del masks
+            torch.cuda.empty_cache()
+
+            # to torch
+            for i in range(len(observed_xyzs)):
+                observed_xyzs[i] = torch.from_numpy(observed_xyzs[i]).to(
+                    dtype=torch.float32, device=self._params.registration.device
+                )
+                mesh_xyzs[i] = torch.from_numpy(mesh_xyzs[i]).to(
+                    dtype=torch.float32, device=self._params.registration.device
+                )
+                mesh_xyzs_normals[i] = torch.from_numpy(mesh_xyzs_normals[i]).to(
+                    dtype=torch.float32, device=self._params.registration.device
+                )
+
+            # registration
+            HT_init = hydra_centroid_alignment(observed_xyzs, mesh_xyzs)
+            HT = hydra_robust_icp(
+                HT_init,
+                observed_xyzs,
+                mesh_xyzs,
+                mesh_xyzs_normals,
+                max_distance=self._params.registration.max_distance,
+                outer_max_iter=self._params.registration.outer_max_iter,
+                inner_max_iter=self._params.registration.inner_max_iter,
+            )
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
+
         #### buffer images somehow
 
         #### clean point cloud somehow
@@ -552,67 +675,68 @@ class RoboregServer(Node):
 
         return response
 
+    def _point_cloud_to_numpy(
+        self,
+        point_cloud: PointCloud2,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        self.get_logger().info("Converting point cloud to numpy")
+        self.get_logger().info(
+            f"Point cloud shape: {point_cloud.height} x {point_cloud.width}"
+        )
+        data = np.array(point_cloud.data, dtype=np.uint8)
+
+        # offset + byte, step size = 4 * 4 bytes
+        x_b0, x_b1, x_b2, x_b3 = (
+            data[point_cloud.fields[0].offset + 0 :: point_cloud.point_step],
+            data[point_cloud.fields[0].offset + 1 :: point_cloud.point_step],
+            data[point_cloud.fields[0].offset + 2 :: point_cloud.point_step],
+            data[point_cloud.fields[0].offset + 3 :: point_cloud.point_step],
+        )
+        y_b0, y_b1, y_b2, y_b3 = (
+            data[point_cloud.fields[1].offset + 0 :: point_cloud.point_step],
+            data[point_cloud.fields[1].offset + 1 :: point_cloud.point_step],
+            data[point_cloud.fields[1].offset + 2 :: point_cloud.point_step],
+            data[point_cloud.fields[1].offset + 3 :: point_cloud.point_step],
+        )
+        z_b0, z_b1, z_b2, z_b3 = (
+            data[point_cloud.fields[2].offset + 0 :: point_cloud.point_step],
+            data[point_cloud.fields[2].offset + 1 :: point_cloud.point_step],
+            data[point_cloud.fields[2].offset + 2 :: point_cloud.point_step],
+            data[point_cloud.fields[2].offset + 3 :: point_cloud.point_step],
+        )
+        rgb_b0, rgb_b1, rgb_b2, rgb_b3 = (
+            data[point_cloud.fields[3].offset + 0 :: point_cloud.point_step],
+            data[point_cloud.fields[3].offset + 1 :: point_cloud.point_step],
+            data[point_cloud.fields[3].offset + 2 :: point_cloud.point_step],
+            data[point_cloud.fields[3].offset + 3 :: point_cloud.point_step],
+        )
+
+        x = np.stack([x_b0, x_b1, x_b2, x_b3], axis=1)
+        y = np.stack([y_b0, y_b1, y_b2, y_b3], axis=1)
+        z = np.stack([z_b0, z_b1, z_b2, z_b3], axis=1)
+        rgba = np.stack([rgb_b0, rgb_b1, rgb_b2, rgb_b3], axis=1)
+
+        height, width = point_cloud.height, point_cloud.width
+
+        x = x.flatten().view(dtype=np.float32).reshape((height, width))
+        y = y.flatten().view(dtype=np.float32).reshape((height, width))
+        z = z.flatten().view(dtype=np.float32).reshape((height, width))
+        rgba = rgba.reshape((height, width, 4))
+
+        return np.stack([x, y, z], axis=-1), rgba
+
     def _on_save_synced_data(
         self, request: SaveSyncedData.Request, response: SaveSyncedData.Response
     ) -> SaveSyncedData.Response:
         if len(self._synced_data_list) == 0:
             response.success = False
-            response.message = "No data collected yet."
+            response.message = "No data collected yet"
             return response
 
         path = pathlib.Path(request.path)
-        self.get_logger().info(f"Saving data to {path.absolute()}.")
+        self.get_logger().info(f"Saving data to {path.absolute()}")
 
         def write_synced_data():
-            def point_cloud_to_numpy(
-                point_cloud: PointCloud2,
-            ) -> Tuple[np.ndarray, np.ndarray]:
-                self.get_logger().info("Converting point cloud to numpy.")
-                self.get_logger().info(
-                    f"Point cloud shape: {point_cloud.height} x {point_cloud.width}"
-                )
-                data = np.array(point_cloud.data, dtype=np.uint8)
-
-                # offset + byte, step size = 4 * 4 bytes
-                x_b0, x_b1, x_b2, x_b3 = (
-                    data[point_cloud.fields[0].offset + 0 :: point_cloud.point_step],
-                    data[point_cloud.fields[0].offset + 1 :: point_cloud.point_step],
-                    data[point_cloud.fields[0].offset + 2 :: point_cloud.point_step],
-                    data[point_cloud.fields[0].offset + 3 :: point_cloud.point_step],
-                )
-                y_b0, y_b1, y_b2, y_b3 = (
-                    data[point_cloud.fields[1].offset + 0 :: point_cloud.point_step],
-                    data[point_cloud.fields[1].offset + 1 :: point_cloud.point_step],
-                    data[point_cloud.fields[1].offset + 2 :: point_cloud.point_step],
-                    data[point_cloud.fields[1].offset + 3 :: point_cloud.point_step],
-                )
-                z_b0, z_b1, z_b2, z_b3 = (
-                    data[point_cloud.fields[2].offset + 0 :: point_cloud.point_step],
-                    data[point_cloud.fields[2].offset + 1 :: point_cloud.point_step],
-                    data[point_cloud.fields[2].offset + 2 :: point_cloud.point_step],
-                    data[point_cloud.fields[2].offset + 3 :: point_cloud.point_step],
-                )
-                rgb_b0, rgb_b1, rgb_b2, rgb_b3 = (
-                    data[point_cloud.fields[3].offset + 0 :: point_cloud.point_step],
-                    data[point_cloud.fields[3].offset + 1 :: point_cloud.point_step],
-                    data[point_cloud.fields[3].offset + 2 :: point_cloud.point_step],
-                    data[point_cloud.fields[3].offset + 3 :: point_cloud.point_step],
-                )
-
-                x = np.stack([x_b0, x_b1, x_b2, x_b3], axis=1)
-                y = np.stack([y_b0, y_b1, y_b2, y_b3], axis=1)
-                z = np.stack([z_b0, z_b1, z_b2, z_b3], axis=1)
-                rgba = np.stack([rgb_b0, rgb_b1, rgb_b2, rgb_b3], axis=1)
-
-                height, width = point_cloud.height, point_cloud.width
-
-                x = x.flatten().view(dtype=np.float32).reshape((height, width))
-                y = y.flatten().view(dtype=np.float32).reshape((height, width))
-                z = z.flatten().view(dtype=np.float32).reshape((height, width))
-                rgba = rgba.reshape((height, width, 4))
-
-                return np.stack([x, y, z], axis=-1), rgba
-
             def write_camera_info_to_yaml(camera_info_msg: CameraInfo, path: str):
                 import yaml
 
@@ -659,18 +783,20 @@ class RoboregServer(Node):
                 for idx, synced_data in enumerate(self._synced_data_list):
                     # log time stamps
                     f.write(
-                        f"{idx},{synced_data.joint_state.header.stamp.sec},{synced_data.joint_state.header.stamp.nanosec}\n"
+                        f"{idx},{synced_data.joint_states.header.stamp.sec},{synced_data.joint_states.header.stamp.nanosec}\n"
                     )
 
                     # convert to numpy
                     image_np = self._bridge.imgmsg_to_cv2(
                         synced_data.image, desired_encoding="passthrough"
                     )
-                    joint_position = synced_data.joint_state.position
-                    name = synced_data.joint_state.name
+                    joint_position = synced_data.joint_states.position
+                    name = synced_data.joint_states.name
                     joint_position = [x for _, x in sorted(zip(name, joint_position))]
                     joint_position_np = np.array(joint_position)
-                    xyz_np, rgba_np = point_cloud_to_numpy(synced_data.point_cloud)
+                    xyz_np, rgba_np = self._point_cloud_to_numpy(
+                        synced_data.point_cloud
+                    )
 
                     # save
                     cv2.imwrite(
@@ -696,12 +822,12 @@ class RoboregServer(Node):
                 write_synced_data()
             except Exception as e:
                 response.success = False
-                response.message = f"Could not write data to {path.absolute()}."
+                response.message = f"Could not write data to {path.absolute()}"
                 self.get_logger().error(response.message)
                 self.get_logger().error(e)
                 return response
             response.success = True
-            response.message = f"Wrote data to {path.absolute()}."
+            response.message = f"Wrote data to {path.absolute()}"
             return response
 
         if request.mkdir:
@@ -710,18 +836,18 @@ class RoboregServer(Node):
                 write_synced_data()
             except Exception as e:
                 response.success = False
-                response.message = f"Could not write data to {path.absolute()}."
+                response.message = f"Could not write data to {path.absolute()}"
                 self.get_logger().error(response.message)
                 self.get_logger().error(e)
                 return response
             response.success = True
             response.message = (
-                f"Created directory {path.absolute()} and wrote data to it."
+                f"Created directory {path.absolute()} and wrote data to it"
             )
             return response
 
         response.success = False
         response.message = (
-            f"Path {path.absolute()} does not exist and was not created as per request."
+            f"Path {path.absolute()} does not exist and was not created as per request"
         )
         return response
