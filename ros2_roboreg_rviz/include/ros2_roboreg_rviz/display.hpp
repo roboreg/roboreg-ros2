@@ -12,6 +12,7 @@
 #include "rviz_common/display.hpp"
 #include "rviz_common/display_context.hpp"
 #include "rviz_common/properties/ros_topic_property.hpp"
+#include "rviz_common/properties/string_property.hpp"
 #include "std_msgs/msg/string.hpp"
 
 #include "ros2_roboreg_rviz/collect_data_widget.hpp"
@@ -31,10 +32,18 @@ protected:
 
 private Q_SLOTS:
   void updateRobotDescriptionTopic();
+  void updateRoboregNodeNode();
 
 private:
   rclcpp::Node::SharedPtr node_ptr_;
-  rviz_common::properties::RosTopicProperty *description_topic_property_;
+
+  CollectDataWidget *collect_data_widget_;
+  RegisterWidget *register_widget_;
+  SaveDataWidget *save_data_widget_;
+
+  // properties
+  rviz_common::properties::RosTopicProperty *robot_description_topic_property_;
+  rviz_common::properties::StringProperty *roboreg_node_name_property_;
 };
 } // end of namespace ros2_roboreg_rviz
 #endif // ROS2_ROBOREG_RVIZ__DISPLAY_HPP_

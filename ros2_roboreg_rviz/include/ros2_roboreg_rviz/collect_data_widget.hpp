@@ -5,6 +5,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QWidget>
+#include <memory>
+#include <string>
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -15,6 +17,8 @@ class CollectDataWidget : public QWidget {
 
 public:
   CollectDataWidget(rclcpp::Node::SharedPtr node_ptr, QWidget *parent = nullptr);
+
+  void setupClient(const std::string &roboreg_nodename);
 
 protected:
   void onCollectData_();

@@ -4,6 +4,7 @@
 #include <QBoxLayout>
 #include <QPushButton>
 #include <QWidget>
+#include <string>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
@@ -12,6 +13,8 @@ namespace ros2_roboreg_rviz {
 class RegisterWidget : public QWidget {
 public:
   RegisterWidget(rclcpp::Node::SharedPtr node_ptr, QWidget *parent = nullptr);
+
+  void setupClient(const std::string &roboreg_nodename);
 
 protected:
   void onRegister_();

@@ -4,8 +4,7 @@ namespace ros2_roboreg_rviz {
 
 SaveDataWidget::SaveDataWidget(const rclcpp::Node::SharedPtr node_ptr, QWidget *parent)
     : QWidget(parent), node_ptr_(node_ptr) {
-  save_data_client_ptr_ =
-      node_ptr_->create_client<ros2_roboreg_idl::srv::SaveData>("save_synced_data");
+  setupClient("roboreg");
 
   // button
   save_data_button_ = new QPushButton("Save synchronized data", this);
@@ -19,7 +18,19 @@ SaveDataWidget::SaveDataWidget(const rclcpp::Node::SharedPtr node_ptr, QWidget *
   connect(save_data_button_, &QPushButton::clicked, this, &SaveDataWidget::onSaveData_);
 }
 
+void SaveDataWidget::setupClient(const std::string &roboreg_nodename) {
+  if (save_data_client_ptr_) {
+    save_data_client_ptr_.reset();
+  }
+  save_data_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::SaveData>(
+      "/" + roboreg_nodename + "/save_data");
+}
+
 void SaveDataWidget::onSaveData_() {
+  if (!save_data_client_ptr_) {
+    RCLCPP_ERROR(node_ptr_->get_logger(), "Save data client not initialized.");
+    return;
+  }
   auto path = QFileDialog::getExistingDirectory(nullptr, "Select output path", QDir::homePath());
 
   if (!save_data_client_ptr_->wait_for_service(std::chrono::seconds(1))) {

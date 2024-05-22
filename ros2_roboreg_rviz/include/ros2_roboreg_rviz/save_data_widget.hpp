@@ -6,6 +6,7 @@
 #include <QFileDialog>
 #include <QPushButton>
 #include <QWidget>
+#include <string>
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -15,6 +16,8 @@ namespace ros2_roboreg_rviz {
 class SaveDataWidget : public QWidget {
 public:
   SaveDataWidget(const rclcpp::Node::SharedPtr node_ptr, QWidget *parent = nullptr);
+
+  void setupClient(const std::string &roboreg_nodename);
 
 protected:
   void onSaveData_();
