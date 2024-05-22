@@ -14,13 +14,17 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(ros2_roboreg_idl REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(pluginlib REQUIRED)
+
+set(CMAKE_AUTOMOC ON) # for Qt MOC
 
 set(ros2_roboreg_rviz_dependencies
   rclcpp
   rviz_common
   ros2_roboreg_idl
+  std_msgs
   std_srvs
   pluginlib
 )
@@ -32,6 +36,7 @@ add_library(
   src/display.cpp
   src/register_widget.cpp
   src/save_data_widget.cpp
+  include/ros2_roboreg_rviz/display.hpp # for Qt MOC
 )
 
 target_include_directories(
@@ -45,7 +50,6 @@ ament_target_dependencies(
   ros2_roboreg_rviz
   ${ros2_roboreg_rviz_dependencies}
 )
-
 
 pluginlib_export_plugin_description_file(rviz_common ros2_roboreg_rviz.xml)
 
