@@ -51,7 +51,7 @@ def main():
         "Loaded homogeneous transform:\n{}".format(ht)
     )
 
-    static_tf_broadcaster.publish_transform(
+    static_tf_broadcaster.broadcast_tf(
         ht=ht,
         parent=args.parent,
         child=args.child,

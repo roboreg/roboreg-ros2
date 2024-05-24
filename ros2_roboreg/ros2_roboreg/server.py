@@ -9,6 +9,7 @@ import cv_bridge
 import numpy as np
 import torch
 from message_filters import ApproximateTimeSynchronizer, Subscriber
+from rcl_interfaces.msg import Parameter, SetParametersResult
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, ReliabilityPolicy, qos_profile_system_default
@@ -26,22 +27,22 @@ from ros2_roboreg_idl.srv import CollectSample, Export, Import
 
 
 @dataclass
-class SyncedData:
+class SyncedSample:
     image: Image
     camera_info: CameraInfo
-    joint_states: JointState
+    joint_state: JointState
     point_cloud: PointCloud2
 
     def __init__(self) -> None:
         self.image = None
         self.camera_info = None
-        self.joint_states = None
+        self.joint_state = None
         self.point_cloud = None
 
     def clear(self) -> None:
         self.image = None
         self.camera_info = None
-        self.joint_states = None
+        self.joint_state = None
         self.point_cloud = None
 
 
@@ -103,9 +104,9 @@ class ServerParams:
 
     def __init__(self) -> None:
         self.filters = self._Filters()
-        self.image_topic = self._TopicParam()
         self.camera_info_topic = self._TopicParam()
-        self.joint_states_topic = self._TopicParam()
+        self.image_topic = self._TopicParam()
+        self.joint_state_topic = self._TopicParam()
         self.point_cloud_topic = self._TopicParam()
         self.robot_description_topic = self._TopicParam()
         self.segmentation = self._SegmentationParams()
@@ -129,8 +130,8 @@ class RoboregServer(Node):
         super().__init__(node_name)
 
         # data collection
-        self._synced_data = SyncedData()
-        self._synced_data_list: List[SyncedData] = []
+        self._synced_sample = SyncedSample()
+        self._synced_samples: List[SyncedSample] = []
 
         # opencv bridge
         self._bridge = cv_bridge.CvBridge()
@@ -145,7 +146,15 @@ class RoboregServer(Node):
         self._get_parameters()
         self._log_parameters()
 
+        # parameter callback
+        self.add_on_set_parameters_callback(self._on_set_parameter)
+
         # subscriptions
+        self._camera_info_sub = None
+        self._image_sub = None
+        self._joint_state_sub = None
+        self._point_cloud_sub = None
+        self._approximate_time_sync = None
         self._create_subscriptions()
 
         # services
@@ -167,8 +176,8 @@ class RoboregServer(Node):
                 ("topics.image.qos_reliability", "RELIABLE"),
                 ("topics.camera_info.name", "left/camera_info"),
                 ("topics.camera_info.qos_reliability", "RELIABLE"),
-                ("topics.joint_states.name", "joint_states"),
-                ("topics.joint_states.qos_reliability", "RELIABLE"),
+                ("topics.joint_state.name", "joint_state"),
+                ("topics.joint_state.qos_reliability", "RELIABLE"),
                 ("topics.point_cloud.name", "point_cloud/cloud_registered"),
                 ("topics.point_cloud.qos_reliability", "RELIABLE"),
                 ("topics.robot_description.name", "robot_description"),
@@ -243,13 +252,13 @@ class RoboregServer(Node):
             .get_parameter_value()
             .string_value
         )
-        self._params.joint_states_topic.name = (
-            self.get_parameter("topics.joint_states.name")
+        self._params.joint_state_topic.name = (
+            self.get_parameter("topics.joint_state.name")
             .get_parameter_value()
             .string_value
         )
-        self._params.joint_states_topic.qos_reliability = (
-            self.get_parameter("topics.joint_states.qos_reliability")
+        self._params.joint_state_topic.qos_reliability = (
+            self.get_parameter("topics.joint_state.qos_reliability")
             .get_parameter_value()
             .string_value
         )
@@ -373,9 +382,9 @@ class RoboregServer(Node):
             f"*{' '*9}QoS reliability: {self._params.camera_info_topic.qos_reliability}"
         )
         self.get_logger().info(f"*{' '*7}Joint states:")
-        self.get_logger().info(f"*{' '*9}Name: {self._params.joint_states_topic.name}")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.joint_state_topic.name}")
         self.get_logger().info(
-            f"*{' '*9}QoS reliability: {self._params.joint_states_topic.qos_reliability}"
+            f"*{' '*9}QoS reliability: {self._params.joint_state_topic.qos_reliability}"
         )
         self.get_logger().info(f"*{' '*7}Point cloud:")
         self.get_logger().info(f"*{' '*9}Name: {self._params.point_cloud_topic.name}")
@@ -432,6 +441,46 @@ class RoboregServer(Node):
         )
         self.get_logger().info("***")
 
+    def _on_set_parameter(self, parameters: List[Parameter]) -> SetParametersResult:
+        result = SetParametersResult()
+        result.successful = True
+        for parameter in parameters:
+            if parameter.name == "topics.camera_info.name":
+                self.get_logger().info(
+                    f"Setting camera info topic to {parameter.value}"
+                )
+                self._params.camera_info_topic.name = parameter.value
+                self._create_camera_info_subscription()
+                self._create_approximate_time_sync()
+            elif parameter.name == "topics.image.name":
+                self.get_logger().info(f"Setting image topic to {parameter.value}")
+                self._params.image_topic.name = parameter.value
+                self._create_image_subscription()
+                self._create_approximate_time_sync()
+            elif parameter.name == "topics.joint_state.name":
+                self.get_logger().info(
+                    f"Setting joint state topic to {parameter.value}"
+                )
+                self._params.joint_state_topic.name = parameter.value
+                self._create_joint_state_subscription()
+                self._create_approximate_time_sync()
+            elif parameter.name == "topics.point_cloud.name":
+                self.get_logger().info(
+                    f"Setting point cloud topic to {parameter.value}"
+                )
+                self._params.point_cloud_topic.name = parameter.value
+                self._create_point_cloud_subscription()
+                self._create_approximate_time_sync()
+            elif parameter.name == "topics.robot_description.name":
+                self.get_logger().info(
+                    f"Setting robot description topic to {parameter.value}"
+                )
+                self._params.robot_description_topic.name = parameter.value
+                self._create_robot_description_subscription()
+            else:
+                continue
+        return result
+
     def _create_services(self) -> None:
         # callback group
         callback_group = MutuallyExclusiveCallbackGroup()
@@ -465,49 +514,74 @@ class RoboregServer(Node):
         )
         self._transform_service = self.create_service(
             Trigger,
-            "~/publish_transformm",
-            self._on_publish_transformm,
+            "~/broadcast_transform",
+            self._on_broadcast_tf,
             callback_group=callback_group,
         )
 
-    def _create_subscriptions(self) -> None:
+    def _create_camera_info_subscription(self) -> None:
+        if self._camera_info_sub is not None:
+            self.destroy_subscription(self._camera_info_sub)
         qos_profile = qos_profile_system_default
-        qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._params.image_topic.qos_reliability
-        )  # override reliability from parameter
-        self._image_sub = Subscriber(
-            self,
-            Image,
-            self._params.image_topic.name,
-            qos_profile=qos_profile,
-        )
         qos_profile.reliability = getattr(
             ReliabilityPolicy, self._params.camera_info_topic.qos_reliability
         )
+        qos_profile.durability = DurabilityPolicy.VOLATILE
         self._camera_info_sub = Subscriber(
             self,
             CameraInfo,
             self._params.camera_info_topic.name,
             qos_profile=qos_profile,
         )
+
+    def _create_image_subscription(self) -> None:
+        if self._image_sub is not None:
+            self.destroy_subscription(self._image_sub)
+        qos_profile = qos_profile_system_default
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._params.joint_states_topic.qos_reliability
+            ReliabilityPolicy, self._params.image_topic.qos_reliability
         )
+        qos_profile.durability = DurabilityPolicy.VOLATILE
+        self._image_sub = Subscriber(
+            self,
+            Image,
+            self._params.image_topic.name,
+            qos_profile=qos_profile,
+        )
+
+    def _create_joint_state_subscription(self) -> None:
+        if self._joint_state_sub is not None:
+            self.destroy_subscription(self._joint_state_sub)
+        qos_profile = qos_profile_system_default
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._params.joint_state_topic.qos_reliability
+        )
+        qos_profile.durability = DurabilityPolicy.VOLATILE
         self._joint_state_sub = Subscriber(
             self,
             JointState,
-            self._params.joint_states_topic.name,
+            self._params.joint_state_topic.name,
             qos_profile=qos_profile,
         )
+
+    def _create_point_cloud_subscription(self) -> None:
+        if self._point_cloud_sub is not None:
+            self.destroy_subscription(self._point_cloud_sub)
+        qos_profile = qos_profile_system_default  # careful, this creates a copy of the system default qos profile
         qos_profile.reliability = getattr(
             ReliabilityPolicy, self._params.point_cloud_topic.qos_reliability
         )
+        qos_profile.durability = DurabilityPolicy.VOLATILE
         self._point_cloud_sub = Subscriber(
             self,
             PointCloud2,
             self._params.point_cloud_topic.name,
             qos_profile=qos_profile,
         )
+
+    def _create_approximate_time_sync(self) -> None:
+        if self._approximate_time_sync is not None:
+            self._approximate_time_sync = None
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [
                 self._image_sub,
@@ -520,7 +594,8 @@ class RoboregServer(Node):
         )
         self._approximate_time_sync.registerCallback(self._on_sync)
 
-        # robot description
+    def _create_robot_description_subscription(self) -> None:
+        qos_profile = qos_profile_system_default
         self._robot_description = None
         qos_profile.reliability = ReliabilityPolicy.RELIABLE
         qos_profile.durability = DurabilityPolicy.TRANSIENT_LOCAL
@@ -531,17 +606,29 @@ class RoboregServer(Node):
             qos_profile=qos_profile,
         )
 
+    def _create_subscriptions(self) -> None:
+        self._create_camera_info_subscription()
+        self._create_image_subscription()
+        self._create_joint_state_subscription()
+        self._create_point_cloud_subscription()
+
+        # topic synchronizer
+        self._create_approximate_time_sync()
+
+        # robot description
+        self._create_robot_description_subscription()
+
     def _on_sync(
         self,
         image: Image,
         camera_info: CameraInfo,
-        joint_states: JointState,
+        joint_state: JointState,
         point_cloud: PointCloud2,
     ):
-        self._synced_data.image = image
-        self._synced_data.camera_info = camera_info
-        self._synced_data.joint_states = joint_states
-        self._synced_data.point_cloud = point_cloud
+        self._synced_sample.image = image
+        self._synced_sample.camera_info = camera_info
+        self._synced_sample.joint_state = joint_state
+        self._synced_sample.point_cloud = point_cloud
 
     def _on_robot_description(self, msg: String) -> None:
         self.get_logger().info("Received robot description.")
@@ -555,52 +642,52 @@ class RoboregServer(Node):
     ) -> CollectSample.Response:
         try:
             if (
-                self._synced_data.image is None
-                or self._synced_data.camera_info is None
-                or self._synced_data.joint_states is None
-                or self._synced_data.point_cloud is None
+                self._synced_sample.image is None
+                or self._synced_sample.camera_info is None
+                or self._synced_sample.joint_state is None
+                or self._synced_sample.point_cloud is None
             ):
                 response.success = False
-                response.n_collected = len(self._synced_data_list)
+                response.n_collected = len(self._synced_samples)
                 response.message = f"No data available yet. Topics might be wrongly configured. Data might not be synchronized, accuracy: {self._params.filters.sync_accuracy} s."
                 self.get_logger().warn(response.message)
                 return response
 
             # check if joint states changed from last data
-            if len(self._synced_data_list) > 1:
+            if len(self._synced_samples) > 1:
                 if np.isclose(
-                    self._synced_data_list[-1].joint_states.position,
-                    self._synced_data.joint_states.position,
+                    self._synced_samples[-1].joint_state.position,
+                    self._synced_sample.joint_state.position,
                     atol=self._params.filters.min_joint_position_change,
                 ).all():
                     response.success = False
-                    response.n_collected = len(self._synced_data_list)
+                    response.n_collected = len(self._synced_samples)
                     response.message = f"Joint states did not change. Minimum joint position change: {self._params.filters.min_joint_position_change} rad. Skipping data collection."
                     self.get_logger().warn(response.message)
                     return response
 
             # only allow joint states velocities close to zero
             if not np.isclose(
-                self._synced_data.joint_states.velocity,
-                np.zeros_like(self._synced_data.joint_states.velocity),
+                self._synced_sample.joint_state.velocity,
+                np.zeros_like(self._synced_sample.joint_state.velocity),
                 atol=self._params.filters.max_joint_velocity,
             ).all():
                 response.success = False
-                response.n_collected = len(self._synced_data_list)
+                response.n_collected = len(self._synced_samples)
                 response.message = f"Joint states velocity greater zero. Maximum joint velocity: {self._params.filters.max_joint_velocity} rad/s. This may cause un-correlated data. Skipping data collection."
                 self.get_logger().warn(response.message)
                 return response
 
             # add data
-            self._synced_data_list.append(copy.deepcopy(self._synced_data))
+            self._synced_samples.append(copy.deepcopy(self._synced_sample))
             response.success = True
-            response.n_collected = len(self._synced_data_list)
-            response.message = f"Added data with time stamp: {self._synced_data.joint_states.header.stamp}"
+            response.n_collected = len(self._synced_samples)
+            response.message = f"Added data with time stamp: {self._synced_sample.joint_state.header.stamp}"
             self.get_logger().info(response.message)
-            self._synced_data.clear()
+            self._synced_sample.clear()
         except Exception as e:
             response.success = False
-            response.n_collected = len(self._synced_data_list)
+            response.n_collected = len(self._synced_samples)
             response.message = f"Failed service call with: {e}"
             self.get_logger().error(response.message)
         return response
@@ -608,7 +695,7 @@ class RoboregServer(Node):
     def _on_register(
         self, request: Trigger.Request, response: Trigger.Response
     ) -> Trigger.Response:
-        if len(self._synced_data_list) == 0:
+        if len(self._synced_samples) == 0:
             response.success = False
             response.message = "No data collected yet"
             return response
@@ -641,14 +728,14 @@ class RoboregServer(Node):
                 )
                 self.get_logger().info("Segmentation model loaded")
                 self.get_logger().info("Segmenting robot...")
-                for idx, synced_data in enumerate(self._synced_data_list):
+                for idx, synced_data in enumerate(self._synced_samples):
                     image = self._bridge.imgmsg_to_cv2(
                         synced_data.image, desired_encoding="bgr8"
                     )
                     points, labels = detector.detect(image)
                     detector.clear()
                     self.get_logger().info(
-                        f"Annotated [{idx+1}/{len(self._synced_data_list)}] images"
+                        f"Annotated [{idx+1}/{len(self._synced_samples)}] images"
                     )
                     mask = segmentor(image, np.array(points), np.array(labels))
                     masks.append((mask * 255.0).astype(np.uint8))
@@ -679,7 +766,7 @@ class RoboregServer(Node):
             observed_xyzs = []
             mesh_xyzs = []
             mesh_xyzs_normals = []
-            for synced_data, mask in zip(self._synced_data_list, masks):
+            for synced_data, mask in zip(self._synced_samples, masks):
                 # extract xyz from point cloud and clean data
                 observed_xyz, _ = self._point_cloud_to_numpy(synced_data.point_cloud)
                 observed_xyzs.append(clean_xyz(observed_xyz, mask))
@@ -689,7 +776,7 @@ class RoboregServer(Node):
                 mesh_xyz_normals = None
 
                 self._o3d_robot.set_joint_positions(
-                    np.array(synced_data.joint_states.position)
+                    np.array(synced_data.joint_state.position)
                 )
                 pcds = self._o3d_robot.sample_point_clouds_equally(
                     number_of_points=self._params.registration.number_of_points
@@ -793,7 +880,7 @@ class RoboregServer(Node):
         self, request: Export.Request, response: Export.Response
     ) -> Export.Response:
         try:
-            if len(self._synced_data_list) == 0:
+            if len(self._synced_samples) == 0:
                 response.success = False
                 response.message = "No data collected yet"
                 return response
@@ -837,7 +924,7 @@ class RoboregServer(Node):
 
                 # save camera info
                 write_camera_info_to_yaml(
-                    self._synced_data_list[0].camera_info,
+                    self._synced_samples[0].camera_info,
                     os.path.join(path, "camera_info.yaml"),
                 )
 
@@ -845,18 +932,18 @@ class RoboregServer(Node):
                 with open(os.path.join(path, "time_stamps.csv"), "w") as f:
                     f.write("idx,sec,nanosec\n")
 
-                    for idx, synced_data in enumerate(self._synced_data_list):
+                    for idx, synced_data in enumerate(self._synced_samples):
                         # log time stamps
                         f.write(
-                            f"{idx},{synced_data.joint_states.header.stamp.sec},{synced_data.joint_states.header.stamp.nanosec}\n"
+                            f"{idx},{synced_data.joint_state.header.stamp.sec},{synced_data.joint_state.header.stamp.nanosec}\n"
                         )
 
                         # convert to numpy
                         image_np = self._bridge.imgmsg_to_cv2(
                             synced_data.image, desired_encoding="passthrough"
                         )
-                        joint_position = synced_data.joint_states.position
-                        name = synced_data.joint_states.name
+                        joint_position = synced_data.joint_state.position
+                        name = synced_data.joint_state.name
                         joint_position = [
                             x for _, x in sorted(zip(name, joint_position))
                         ]
@@ -882,7 +969,7 @@ class RoboregServer(Node):
                             os.path.join(path, f"rgba_{idx}.npy"),
                             rgba_np,
                         )
-                self._synced_data_list.clear()
+                self._synced_samples.clear()
 
             if path.exists():
                 try:
@@ -924,19 +1011,58 @@ class RoboregServer(Node):
     def _on_export_transform(
         self, request: Export.Request, response: Export.Response
     ) -> Export.Response:
-        pass
+        path = pathlib.Path(request.path)
+        self.get_logger().info(f"Saving transform to {path.absolute()}")
+        response.success = True
+        try:
+            if not path.parent.exists():
+                if request.mkdir:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                else:
+                    response.success = False
+                    response.message = f"Path {path.parent.absolute()} does not exist"
+                    self.get_logger().error(response.message)
+                    return response
+            np.savetxt(path, self._HT)
+            response.message = f"Saved transform to {path.absolute()}"
+            self.get_logger().info(response.message)
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
+        return response
 
     def _on_import_transform(
         self, request: Import.Request, response: Import.Response
     ) -> Import.Response:
-        pass
+        response.success = True
+        path = pathlib.Path(request.path)
+        try:
+            if not path.exists():
+                response.success = False
+                response.message = f"Path {path.absolute()} does not exist"
+                self.get_logger().error(response.message)
+                return response
+            self.get_logger().info(f"Loading transform from {request.path}")
+            HT = np.loadtxt(path.absolute())
+            if HT.shape != (4, 4):
+                response.success = False
+                response.message = f"Transform has wrong shape: {HT.shape}"
+                self.get_logger().error(response.message)
+                return response
+            self._HT = copy.deepcopy(HT)
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
+        return response
 
-    def _on_publish_transformm(
+    def _on_broadcast_tf(
         self, request: Trigger.Request, response: Trigger.Response
     ) -> Trigger.Response:
         response.success = True
         try:
-            self._tf_broadcaster.publish_transformm(
+            self._tf_broadcaster.broadcast_tf(
                 self._HT,
                 parent=self._params.tf_broadcaster.parent_frame,
                 child=self._params.tf_broadcaster.child_frame,

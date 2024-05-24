@@ -2,11 +2,11 @@
 #define ROS2_ROBOREG_RVIZ__DISPLAY_HPP_
 
 #ifndef Q_MOC_RUN
-#include <chrono>
-#include <memory>
-
 #include <QVBoxLayout>
 #include <QWidget>
+#include <chrono>
+#include <memory>
+#include <string>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rviz_common/display.hpp"
@@ -18,7 +18,7 @@
 #include "std_msgs/msg/string.hpp"
 
 #include "ros2_roboreg_rviz/collect_sample_widget.hpp"
-#include "ros2_roboreg_rviz/export_samples_widget.hpp"
+#include "ros2_roboreg_rviz/io_widget.hpp"
 #include "ros2_roboreg_rviz/register_widget.hpp"
 #endif
 
@@ -40,10 +40,12 @@ private Q_SLOTS:
 
 private:
   rclcpp::Node::SharedPtr node_ptr_;
+  rclcpp::AsyncParametersClient::UniquePtr parameters_client_;
+  std::string roboreg_node_name_;
 
   CollectSampleWidget *collect_sample_widget_;
   RegisterWidget *register_widget_;
-  ExportSamplesWidget *export_samples_widget_;
+  IOWidget *io_widget_;
 
   // properties
   rviz_common::properties::RosTopicProperty *robot_description_topic_property_;

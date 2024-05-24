@@ -18,7 +18,7 @@ class StaticTFBroadcaster:
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self._node)
 
-    def publish_transform(
+    def broadcast_tf(
         self, ht: np.ndarray, parent: str, child: str, target_child: str = ""
     ):
         tf_tc_c = None

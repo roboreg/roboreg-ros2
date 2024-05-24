@@ -1,13 +1,12 @@
 #include "ros2_roboreg_rviz/display.hpp"
 
 namespace ros2_roboreg_rviz {
-Display::Display() {
+Display::Display() : roboreg_node_name_("roboreg") {
   robot_description_topic_property_ = new rviz_common::properties::RosTopicProperty(
       "Description Topic", "robot_description",
       rosidl_generator_traits::name<std_msgs::msg::String>(),
       "Topic under which the robot description is published.", this,
       SLOT(updateRobotDescriptionTopic()), this);
-
   joint_state_topic_property_ = new rviz_common::properties::RosTopicProperty(
       "Joint State Topic", "joint_states",
       rosidl_generator_traits::name<sensor_msgs::msg::JointState>(),
@@ -18,8 +17,9 @@ Display::Display() {
       rosidl_generator_traits::name<sensor_msgs::msg::PointCloud2>(),
       "Topic under which the point cloud is published.", this, SLOT(updatePointCloudTopic()), this);
   roboreg_node_name_property_ = new rviz_common::properties::StringProperty(
-      "Roboreg Node Name", "roboreg", "The node name under which the roboreg server lives.", this,
-      SLOT(updateRoboregNodeNode()), this);
+      "Roboreg Node Name", roboreg_node_name_.c_str(),
+      "The node name under which the roboreg server lives.", this, SLOT(updateRoboregNodeNode()),
+      this);
 }
 
 void Display::onInitialize() {
@@ -31,6 +31,9 @@ void Display::onInitialize() {
   }
   node_ptr_ = node_abstraction->get_raw_node();
 
+  parameters_client_ =
+      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_node_name_);
+
   // initialize properties
   robot_description_topic_property_->initialize(node_abstraction);
   joint_state_topic_property_->initialize(node_abstraction);
@@ -38,37 +41,44 @@ void Display::onInitialize() {
 
   // add a collect data and save synced data widgets
   auto widget = new QWidget();
-  collect_sample_widget_ = new CollectSampleWidget(node_ptr_, widget);
-  register_widget_ = new RegisterWidget(node_ptr_, widget);
-  export_samples_widget_ = new ExportSamplesWidget(node_ptr_, widget);
+  collect_sample_widget_ = new CollectSampleWidget(node_ptr_, roboreg_node_name_, widget);
+  register_widget_ = new RegisterWidget(node_ptr_, roboreg_node_name_, widget);
+  io_widget_ = new IOWidget(node_ptr_, roboreg_node_name_, widget);
   setAssociatedWidget(widget);
 
   // set layout
   auto layout = new QVBoxLayout(widget);
   layout->addWidget(collect_sample_widget_);
   layout->addWidget(register_widget_);
-  layout->addWidget(export_samples_widget_);
+  layout->addWidget(io_widget_);
 }
 
 void Display::updateRobotDescriptionTopic() {
-  RCLCPP_INFO(node_ptr_->get_logger(), "Robot description topic changed.");
-
-  // set robot description topic for roboreg server (this requires a parameter callback to update
-  // the subscriber in roboreg server)
+  auto topic = robot_description_topic_property_->getStdString();
+  RCLCPP_INFO(node_ptr_->get_logger(), "Updating robot description topic to: %s", topic.c_str());
+  parameters_client_->set_parameters({rclcpp::Parameter("topics.robot_description.name", topic)});
 }
 
 void Display::updateJointStateTopic() {
-  RCLCPP_INFO(node_ptr_->get_logger(), "Joint state topic changed.");
+  auto topic = joint_state_topic_property_->getStdString();
+  RCLCPP_INFO(node_ptr_->get_logger(), "Updating joint state topic to: %s", topic.c_str());
+  parameters_client_->set_parameters({rclcpp::Parameter("topics.joint_state.name", topic)});
 }
 
 void Display::updatePointCloudTopic() {
-  RCLCPP_INFO(node_ptr_->get_logger(), "Point cloud topic changed.");
+  auto topic = point_cloud_topic_property_->getStdString();
+  RCLCPP_INFO(node_ptr_->get_logger(), "Updating point cloud topic to: %s", topic.c_str());
+  parameters_client_->set_parameters({rclcpp::Parameter("topics.point_cloud.name", topic)});
 }
 
 void Display::updateRoboregNodeNode() {
-  collect_sample_widget_->setupClient(roboreg_node_name_property_->getStdString());
-  register_widget_->setupClient(roboreg_node_name_property_->getStdString());
-  export_samples_widget_->setupClient(roboreg_node_name_property_->getStdString());
+  roboreg_node_name_ = roboreg_node_name_property_->getStdString();
+  collect_sample_widget_->setupClient(roboreg_node_name_);
+  register_widget_->setupClient(roboreg_node_name_);
+  io_widget_->setupClient(roboreg_node_name_);
+  parameters_client_.reset();
+  parameters_client_ =
+      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_node_name_);
 }
 } // end of namespace ros2_roboreg_rviz
 

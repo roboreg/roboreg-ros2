@@ -16,9 +16,10 @@ namespace ros2_roboreg_rviz {
 class CollectSampleWidget : public QWidget {
 
 public:
-  CollectSampleWidget(rclcpp::Node::SharedPtr node_ptr, QWidget *parent = nullptr);
+  CollectSampleWidget(rclcpp::Node::SharedPtr node_ptr,
+                      const std::string &roboreg_node_name = "roboreg", QWidget *parent = nullptr);
 
-  void setupClient(const std::string &roboreg_nodename);
+  void setupClient(const std::string &roboreg_node_name);
 
 protected:
   void onCollectSample_();

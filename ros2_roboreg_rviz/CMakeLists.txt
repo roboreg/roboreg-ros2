@@ -36,8 +36,8 @@ add_library(
   SHARED
   src/collect_sample_widget.cpp
   src/display.cpp
+  src/io_widget.cpp
   src/register_widget.cpp
-  src/export_samples_widget.cpp
   include/ros2_roboreg_rviz/display.hpp # for Qt MOC
 )
 
