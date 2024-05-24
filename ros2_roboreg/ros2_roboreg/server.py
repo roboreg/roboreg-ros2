@@ -491,6 +491,9 @@ class RoboregServer(Node):
             self._on_collect_sample,
             callback_group=callback_group,
         )
+        self._clear_samples_service = self.create_service(
+            Trigger, "~/clear_samples", self._on_clear_samples
+        )
         self._register_service = self.create_service(
             Trigger, "~/register", self._on_register
         )
@@ -690,6 +693,15 @@ class RoboregServer(Node):
             response.n_collected = len(self._synced_samples)
             response.message = f"Failed service call with: {e}"
             self.get_logger().error(response.message)
+        return response
+
+    def _on_clear_samples(
+        self, request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
+        self._synced_samples.clear()
+        response.success = True
+        response.message = "Cleared all samples"
+        self.get_logger().info(response.message)
         return response
 
     def _on_register(

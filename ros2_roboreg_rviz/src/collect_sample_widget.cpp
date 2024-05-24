@@ -8,17 +8,21 @@ CollectSampleWidget::CollectSampleWidget(rclcpp::Node::SharedPtr node_ptr,
 
   // button and count label
   collect_sample_button_ = new QPushButton("Collect Sample", this);
+  clear_samples_button_ = new QPushButton("Clear Samples", this);
   count_display_ = new QLabel("Collected samples: 0", this);
 
   // set layout
   auto layout = new QVBoxLayout(this);
   layout->addWidget(collect_sample_button_);
+  layout->addWidget(clear_samples_button_);
   layout->addWidget(count_display_);
   this->setLayout(layout);
 
-  // button callback
+  // button callbacks
   connect(collect_sample_button_, &QPushButton::clicked, this,
           &CollectSampleWidget::onCollectSample_);
+  connect(clear_samples_button_, &QPushButton::clicked, this,
+          &CollectSampleWidget::onClearSamples_);
 }
 
 void CollectSampleWidget::setupClient(const std::string &roboreg_node_name) {
@@ -27,6 +31,11 @@ void CollectSampleWidget::setupClient(const std::string &roboreg_node_name) {
   }
   collect_sample_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::CollectSample>(
       "/" + roboreg_node_name + "/collect_sample");
+  if (clear_samples_client_ptr_) {
+    clear_samples_client_ptr_.reset();
+  }
+  clear_samples_client_ptr_ =
+      node_ptr_->create_client<std_srvs::srv::Trigger>("/" + roboreg_node_name + "/clear_samples");
 }
 
 void CollectSampleWidget::onCollectSample_() {
@@ -44,6 +53,25 @@ void CollectSampleWidget::onCollectSample_() {
       request, [this](rclcpp::Client<ros2_roboreg_idl::srv::CollectSample>::SharedFuture result) {
         if (result.get()->success) {
           count_display_->setText(QString("Collected samples: %1").arg(result.get()->n_collected));
+        }
+      });
+}
+
+void CollectSampleWidget::onClearSamples_() {
+  if (!clear_samples_client_ptr_) {
+    RCLCPP_ERROR(node_ptr_->get_logger(), "Clear samples client not initialized.");
+    return;
+  }
+  if (!clear_samples_client_ptr_->wait_for_service(std::chrono::seconds(1))) {
+    RCLCPP_ERROR(node_ptr_->get_logger(), "Service %s not available.",
+                 clear_samples_client_ptr_->get_service_name());
+    return;
+  }
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  auto future = clear_samples_client_ptr_->async_send_request(
+      request, [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture result) {
+        if (result.get()->success) {
+          count_display_->setText("Collected samples: 0");
         }
       });
 }

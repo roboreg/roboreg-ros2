@@ -38,6 +38,7 @@ ros2 launch ros2_roboreg server.launch.py -s
 
 #### Services
 * `~/collect_sample`
+* `~/clear_samples`
 * `~/register`
 * `~/export/samples`
 * `~/export/transform`
