@@ -42,6 +42,7 @@ ros2 launch ros2_roboreg server.launch.py -s
 * `~/export/samples`
 * `~/export/transform`
 * `~/import/transform`
+* `~/broadcast_transform`
 
 ### Autoreg
 Utility node for executing trajectory via `ros2_control` and collecting samples via `ros2_roboreg`.
