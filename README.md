@@ -31,14 +31,17 @@ ros2 launch ros2_roboreg server.launch.py -s
 
 #### Subscriped Topics
 * `image_rect_color`
-* `camera_info`: 
-* `joint_states`: 
-* `point_cloud/cloud_registered`: 
+* `camera_info` 
+* `joint_states`
+* `point_cloud/cloud_registered`
+* `robot_description`
 
 #### Services
-* `~/collect_data`: 
-* `~/register`: 
-* `~/save_synced_data`: 
+* `~/collect_sample`
+* `~/register`
+* `~/export/samples`
+* `~/export/transform`
+* `~/import/transform`
 
 ### Autoreg
 Utility node for executing trajectory via `ros2_control` and collecting samples via `ros2_roboreg`.

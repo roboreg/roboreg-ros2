@@ -14,6 +14,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(ros2_roboreg_idl REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -24,6 +25,7 @@ set(ros2_roboreg_rviz_dependencies
   rclcpp
   rviz_common
   ros2_roboreg_idl
+  sensor_msgs
   std_msgs
   std_srvs
   pluginlib
@@ -32,10 +34,10 @@ set(ros2_roboreg_rviz_dependencies
 add_library(
   ros2_roboreg_rviz
   SHARED
-  src/collect_data_widget.cpp
+  src/collect_sample_widget.cpp
   src/display.cpp
   src/register_widget.cpp
-  src/save_data_widget.cpp
+  src/export_samples_widget.cpp
   include/ros2_roboreg_rviz/display.hpp # for Qt MOC
 )
 

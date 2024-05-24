@@ -22,7 +22,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 from ros2_roboreg.broadcaster import StaticTFBroadcaster
-from ros2_roboreg_idl.srv import CollectData, SaveData
+from ros2_roboreg_idl.srv import CollectSample, Export, Import
 
 
 @dataclass
@@ -436,19 +436,31 @@ class RoboregServer(Node):
         # callback group
         callback_group = MutuallyExclusiveCallbackGroup()
 
-        self._collect_service = self.create_service(
-            CollectData,
-            "~/collect_data",
-            self._on_collect,
+        self._collect_sample_service = self.create_service(
+            CollectSample,
+            "~/collect_sample",
+            self._on_collect_sample,
             callback_group=callback_group,
         )
         self._register_service = self.create_service(
             Trigger, "~/register", self._on_register
         )
-        self._save_data_service = self.create_service(
-            SaveData,
-            "~/save_data",
-            self._on_save_data,
+        self._export_samples_service = self.create_service(
+            Export,
+            "~/export/samples",
+            self._on_export_samples,
+            callback_group=callback_group,
+        )
+        self._export_transform_service = self.create_service(
+            Export,
+            "~/export/transform",
+            self._on_export_transform,
+            callback_group=callback_group,
+        )
+        self._import_transform_service = self.create_service(
+            Import,
+            "~/import/transform",
+            self._on_import_transform,
             callback_group=callback_group,
         )
         self._transform_service = self.create_service(
@@ -538,9 +550,9 @@ class RoboregServer(Node):
             self._robot_description, self._params.registration.convex_hull
         )
 
-    def _on_collect(
-        self, request: CollectData.Request, response: CollectData.Response
-    ) -> CollectData.Response:
+    def _on_collect_sample(
+        self, request: CollectSample.Request, response: CollectSample.Response
+    ) -> CollectSample.Response:
         try:
             if (
                 self._synced_data.image is None
@@ -777,9 +789,9 @@ class RoboregServer(Node):
 
         return np.stack([x, y, z], axis=-1), rgba
 
-    def _on_save_data(
-        self, request: SaveData.Request, response: SaveData.Response
-    ) -> SaveData.Response:
+    def _on_export_samples(
+        self, request: Export.Request, response: Export.Response
+    ) -> Export.Response:
         try:
             if len(self._synced_data_list) == 0:
                 response.success = False
@@ -908,6 +920,16 @@ class RoboregServer(Node):
             response.message = f"Failed service call with: {e}"
             self.get_logger().error(response.message)
         return response
+
+    def _on_export_transform(
+        self, request: Export.Request, response: Export.Response
+    ) -> Export.Response:
+        pass
+
+    def _on_import_transform(
+        self, request: Import.Request, response: Import.Response
+    ) -> Import.Response:
+        pass
 
     def _on_publish_transformm(
         self, request: Trigger.Request, response: Trigger.Response

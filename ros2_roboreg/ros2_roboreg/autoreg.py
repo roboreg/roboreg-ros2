@@ -2,28 +2,31 @@
 ### ros2_roboreg services
 ### ros2_control joint trajectory controller action server
 
-import csv
 import argparse
-import os
+import csv
 import glob
+import os
 
+import numpy as np
 import rclpy
 from control_msgs.action import FollowJointTrajectory
 from rclpy.action import ActionClient
-import numpy as np
 from rclpy.node import Node
-from ros2_roboreg_idl.srv import CollectData
 from trajectory_msgs.msg import JointTrajectoryPoint
+
+from ros2_roboreg_idl.srv import CollectSample
 
 
 class AutoReg(Node):
     def __init__(self, joint_states_path: str) -> None:
         super().__init__("autoreg")
 
-        self.collect_data_client_ = self.create_client(CollectData, "collect_data")
-        while not self.collect_data_client_.wait_for_service(timeout_sec=1.0):
+        self.collect_sample_client_ = self.create_client(
+            CollectSample, "collect_sample"
+        )
+        while not self.collect_sample_client_.wait_for_service(timeout_sec=1.0):
             self.get_logger().info(
-                f"Waiting for {self.collect_data_client_.srv_name} service..."
+                f"Waiting for {self.collect_sample_client_.srv_name} service..."
             )
         self.joint_trajectory_action_client_ = ActionClient(
             node=self,
@@ -52,15 +55,15 @@ class AutoReg(Node):
 
             # data collection
             self.get_logger().info(f"Collecting data for joint state...")
-            if not self.collect_data_():
+            if not self.collect_sample_():
                 self.get_logger().error(f"Failed to collect data. Continuing...")
                 continue
             self.get_logger().info(f"Data collected successfully.")
 
-    def collect_data_(self) -> bool:
-        self.collect_data_client_.wait_for_service()
-        req = CollectData.Request()
-        future = self.collect_data_client_.call_async(req)
+    def collect_sample_(self) -> bool:
+        self.collect_sample_client_.wait_for_service()
+        req = CollectSample.Request()
+        future = self.collect_sample_client_.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         result = future.result()
         if result is None:
