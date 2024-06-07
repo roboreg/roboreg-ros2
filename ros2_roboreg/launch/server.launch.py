@@ -35,6 +35,7 @@ def generate_launch_description() -> LaunchDescription:
                     ]
                 )
             ],
+            emulate_tty=True,
         )
     )
     return ld
