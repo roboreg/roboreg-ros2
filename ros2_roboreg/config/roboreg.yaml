@@ -12,7 +12,7 @@
       camera_info:
         name: /camera_info
         qos_reliability: BEST_EFFORT
-      joint_states:
+      joint_state:
         name: /joint_states
         qos_reliability: BEST_EFFORT
       point_cloud:
