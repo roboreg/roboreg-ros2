@@ -904,35 +904,27 @@ class RoboregServer(Node):
                 def write_camera_info_to_yaml(camera_info_msg: CameraInfo, path: str):
                     import yaml
 
-                    camera_info = {
-                        "width": camera_info_msg.width,
-                        "height": camera_info_msg.height,
+                    camera_info_dict = {
                         "frame_id": camera_info_msg.header.frame_id,
-                        "camera_matrix": {
-                            "rows": 3,
-                            "cols": 3,
-                            "data": camera_info_msg.k.tolist(),
-                        },
+                        "height": camera_info_msg.height,
+                        "width": camera_info_msg.width,
                         "distortion_model": camera_info_msg.distortion_model,
-                        "distortion_coefficients": {
-                            "rows": 1,
-                            "cols": 5,
-                            "data": camera_info_msg.d.tolist(),
-                        },
-                        "rectification_matrix": {
-                            "rows": 3,
-                            "cols": 3,
-                            "data": camera_info_msg.r.tolist(),
-                        },
-                        "projection_matrix": {
-                            "rows": 3,
-                            "cols": 4,
-                            "data": camera_info_msg.p.tolist(),
+                        "d": camera_info_msg.d.tolist(),
+                        "k": camera_info_msg.k.tolist(),
+                        "r": camera_info_msg.r.tolist(),
+                        "p": camera_info_msg.p.tolist(),
+                        "binning_x": camera_info_msg.binning_x,
+                        "binning_y": camera_info_msg.binning_y,
+                        "roi": {
+                            "x_offset": camera_info_msg.roi.x_offset,
+                            "y_offset": camera_info_msg.roi.y_offset,
+                            "height": camera_info_msg.roi.height,
+                            "width": camera_info_msg.roi.width,
+                            "do_rectify": camera_info_msg.roi.do_rectify,
                         },
                     }
-
-                    with open(path, "w") as f:
-                        yaml.dump(camera_info, f)
+                    with open(path, "w") as file:
+                        yaml.dump(camera_info_dict, file)
 
                 # save camera info
                 write_camera_info_to_yaml(
