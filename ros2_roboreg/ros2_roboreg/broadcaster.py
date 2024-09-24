@@ -34,7 +34,7 @@ class StaticTFBroadcaster:
                     self._node.get_logger().info(
                         f"Waiting for transform from {target_child} to {child}."
                     )
-                rclpy.spin_once(self)
+                rclpy.spin_once(self._node)
                 time.sleep(1.0)
         else:
             target_child = child
