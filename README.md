@@ -56,7 +56,7 @@ ros2 run ros2_roboreg autoreg --help
 Utility node for publishing static transform as acquired through `ros2_roboreg`.
 
 ```shell
-ros2 run ros2_roboreg --help
+ros2 run ros2_roboreg broadcaster --help
 ```
 
 ## Acknowledgements

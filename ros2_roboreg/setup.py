@@ -24,7 +24,7 @@ setup(
     entry_points={
         "console_scripts": [
             "roboreg = scripts.roboreg_node:main",
-            "broadcaster = scripts.broadcaster:main",
+            "broadcaster = scripts.broadcaster_node:main",
         ],
     },
 )
