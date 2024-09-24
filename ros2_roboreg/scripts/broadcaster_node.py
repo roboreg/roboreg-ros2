@@ -39,7 +39,7 @@ def main():
     node = Node("static_tf_broadcaster")
     static_tf_broadcaster = StaticTFBroadcaster(node=node)
 
-    static_tf_broadcaster.get_logger().info(
+    node.get_logger().info(
         "Got target frames parent: {}, child: {}, target child: {}.".format(
             args.parent, args.child, args.target_child
         )
@@ -47,7 +47,7 @@ def main():
 
     # load ht
     ht = np.load(args.ht)
-    static_tf_broadcaster.get_logger().info(
+    node.get_logger().info(
         "Loaded homogeneous transform:\n{}".format(ht)
     )
 
