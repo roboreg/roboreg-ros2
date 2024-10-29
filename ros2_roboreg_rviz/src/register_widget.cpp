@@ -25,13 +25,13 @@ void RegisterWidget::setupClient(const std::string &roboreg_node_name) {
   if (register_client_ptr_) {
     register_client_ptr_.reset();
   }
-  register_client_ptr_ =
-      node_ptr_->create_client<std_srvs::srv::Trigger>("/" + roboreg_node_name + "/register");
+  register_client_ptr_ = node_ptr_->create_client<std_srvs::srv::Trigger>("/" + roboreg_node_name +
+                                                                          "/register/hydra_icp");
   if (broadcast_tf_client_ptr_) {
     broadcast_tf_client_ptr_.reset();
   }
-  broadcast_tf_client_ptr_ =
-      node_ptr_->create_client<std_srvs::srv::Trigger>("/" + roboreg_node_name + "/broadcast_transform");
+  broadcast_tf_client_ptr_ = node_ptr_->create_client<std_srvs::srv::Trigger>(
+      "/" + roboreg_node_name + "/broadcast_transform");
 }
 
 void RegisterWidget::onRegister_() {

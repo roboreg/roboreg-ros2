@@ -12,11 +12,17 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
-- Install [roboreg](https://github.com/lbr-stack/roboreg):
+- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation):
+
+> [!NOTE]
+> When using differentiable rendering, CUDA Toolkit is required at runtime, refer [CUDA Toolkit Install Instructions](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/).
+
 ```shell
-pip3 install git+https://github.com/lbr-stack/roboreg.git
+pip3 install git+https://github.com/lbr-stack/roboreg.git@0.4.1
 ```
-- Build this wrapper
+
+- Build this `roboreg` ROS 2 integration
+
 ```shell
 mkdir -p lbr-stack/src && cd lbr-stack
 git clone https://github.com/lbr-stack/roboreg.git src/ros2_roboreg
@@ -33,13 +39,14 @@ ros2 launch ros2_roboreg server.launch.py -s
 * `image_rect_color`
 * `camera_info` 
 * `joint_states`
-* `point_cloud/cloud_registered`
+* `depth/registered`
 * `robot_description`
 
 #### Services
 * `~/collect_sample`
 * `~/clear_samples`
-* `~/register`
+* `~/register/hydra_icp`
+* `~/register/stereo_dr`
 * `~/export/samples`
 * `~/export/transform`
 * `~/import/transform`

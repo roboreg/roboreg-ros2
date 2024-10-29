@@ -1,7 +1,6 @@
 import copy
 import os
 import pathlib
-from dataclasses import dataclass
 from typing import List, Tuple
 
 import cv2
@@ -13,116 +12,27 @@ from rcl_interfaces.msg import Parameter, SetParametersResult
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, ReliabilityPolicy, qos_profile_system_default
+from roboreg import differentiable as rrd
 from roboreg.detector import OpenCVDetector
 from roboreg.hydra_icp import hydra_centroid_alignment, hydra_robust_icp
-from roboreg.o3d_robot import O3DRobot
-from roboreg.segmentor import SamSegmentor
-from roboreg.util import clean_xyz, mask_boundary
-from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
+from roboreg.io import URDFParser
+from roboreg.segmentor import Sam2Segmentor
+from roboreg.util import (
+    clean_xyz,
+    compute_vertex_normals,
+    depth_to_xyz,
+    from_homogeneous,
+    generate_ht_optical,
+    mask_boundary,
+    to_homogeneous,
+)
+from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 from ros2_roboreg.broadcaster import StaticTFBroadcaster
+from ros2_roboreg.structs import ServerParams, SyncedSample
 from ros2_roboreg_idl.srv import CollectSample, Export, Import
-
-
-@dataclass
-class SyncedSample:
-    image: Image
-    camera_info: CameraInfo
-    joint_state: JointState
-    point_cloud: PointCloud2
-
-    def __init__(self) -> None:
-        self.image = None
-        self.camera_info = None
-        self.joint_state = None
-        self.point_cloud = None
-
-    def clear(self) -> None:
-        self.image = None
-        self.camera_info = None
-        self.joint_state = None
-        self.point_cloud = None
-
-
-@dataclass
-class ServerParams:
-    class _Filters:
-        sync_accuracy: float
-        min_joint_position_change: float
-        max_joint_velocity: float
-
-        def __init__(self) -> None:
-            self.sync_accuracy = 0.01
-            self.min_joint_position_change = 0.001
-            self.max_joint_velocity = 0.01
-
-    @dataclass
-    class _TopicParam:
-        name: str
-        qos_reliability: str
-
-        def __init__(self) -> None:
-            self.name = ""
-            self.qos_reliability = ""
-
-    @dataclass
-    class _SegmentationParams:
-        buffer_size: int
-        model_type: str
-        device: str
-        sam_checkpoint_path: str
-
-        def __init__(self) -> None:
-            self.buffer_size = 5
-            self.model_type = "vit_h"
-            self.device = "cuda"
-            self.sam_checkpoint_path = ""
-
-    @dataclass
-    class _RegistrationParams:
-        erosion_kernel_size: int
-        convex_hull: bool
-        number_of_points: int
-        device: str
-        max_distance: float
-        outer_max_iter: int
-        inner_max_iter: int
-        rmse_change: float
-
-        def __init__(self) -> None:
-            self.erosion_kernel_size = 10
-            self.convex_hull = False
-            self.number_of_points = 5000
-            self.device = "cuda"
-            self.max_distance = 0.1
-            self.outer_max_iter = 100
-            self.inner_max_iter = 3
-            self.rmse_change = 1.0e-6
-            self.sam_checkpoint_path = ""
-
-    def __init__(self) -> None:
-        self.filters = self._Filters()
-        self.camera_info_topic = self._TopicParam()
-        self.image_topic = self._TopicParam()
-        self.joint_state_topic = self._TopicParam()
-        self.point_cloud_topic = self._TopicParam()
-        self.robot_description_topic = self._TopicParam()
-        self.segmentation = self._SegmentationParams()
-        self.registration = self._RegistrationParams()
-        self.tf_broadcaster = self.TFParams()
-
-    @dataclass
-    class TFParams:
-        parent_frame: str
-        child_frame: str
-        target_child_frame: str
-
-        def __init__(self) -> None:
-            self.parent_frame = "world"
-            self.child_frame = ""
-            self.target_child_frame = ""
 
 
 class RoboregServer(Node):
@@ -153,7 +63,7 @@ class RoboregServer(Node):
         self._camera_info_sub = None
         self._image_sub = None
         self._joint_state_sub = None
-        self._point_cloud_sub = None
+        self._depth_sub = None
         self._approximate_time_sync = None
         self._create_subscriptions()
 
@@ -178,31 +88,44 @@ class RoboregServer(Node):
                 ("topics.camera_info.qos_reliability", "RELIABLE"),
                 ("topics.joint_state.name", "joint_state"),
                 ("topics.joint_state.qos_reliability", "RELIABLE"),
-                ("topics.point_cloud.name", "point_cloud/cloud_registered"),
-                ("topics.point_cloud.qos_reliability", "RELIABLE"),
+                ("topics.depth.name", "depth/registered"),
+                ("topics.depth.qos_reliability", "RELIABLE"),
                 ("topics.robot_description.name", "robot_description"),
             ],
         )
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("segmentation.buffer_size", 5),
-                ("segmentation.model_type", "vit_h"),
-                ("segmentation.device", "cuda"),
-                ("segmentation.sam_checkpoint_path", ""),
+                ("segmentation.device", "cuda" if torch.cuda.is_available() else "cpu"),
+                ("segmentation.n_positive_samples", 5),
+                ("segmentation.n_negative_samples", 5),
+                ("segmentation.model_id", "facebook/sam2-hiera-large"),
+                ("segmentation.pth", 0.5),
             ],
         )
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("registration.erosion_kernel_size", 10),
-                ("registration.convex_hull", False),
-                ("registration.number_of_points", 5000),
-                ("registration.device", "cuda"),
-                ("registration.max_distance", 0.1),
-                ("registration.outer_max_iter", 100),
-                ("registration.inner_max_iter", 3),
-                ("registration.rmse_change", 1.0e-6),
+                ("robot_model.device", "cuda" if torch.cuda.is_available() else "cpu"),
+                ("robot_model.root_link_name", ""),
+                ("robot_model.end_link_name", ""),
+                ("robot_model.visual_meshes", False),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("registration.hydra_icp.erosion_kernel_size", 10),
+                ("registration.hydra_icp.number_of_points", 5000),
+                ("registration.hydra_icp.max_distance", 0.1),
+                ("registration.hydra_icp.outer_max_iter", 100),
+                ("registration.hydra_icp.inner_max_iter", 3),
+                ("registration.hydra_icp.rmse_change", 1.0e-6),
+                ("registration.stereo_dr.optimizer", "SGD"),
+                ("registration.stereo_dr.lr", 0.001),
+                ("registration.stereo_dr.epochs", 100),
+                ("registration.stereo_dr.step_size", 100),
+                ("registration.stereo_dr.gamma", 1),
             ],
         )
         self.declare_parameters(
@@ -262,14 +185,12 @@ class RoboregServer(Node):
             .get_parameter_value()
             .string_value
         )
-        self._params.point_cloud_topic.name = (
-            self.get_parameter("topics.point_cloud.name")
-            .get_parameter_value()
-            .string_value
+        self._params.depth_topic.name = (
+            self.get_parameter("topics.depth.name").get_parameter_value().string_value
         )
 
-        self._params.point_cloud_topic.qos_reliability = (
-            self.get_parameter("topics.point_cloud.qos_reliability")
+        self._params.depth_topic.qos_reliability = (
+            self.get_parameter("topics.depth.qos_reliability")
             .get_parameter_value()
             .string_value
         )
@@ -280,68 +201,107 @@ class RoboregServer(Node):
         )
 
         # segmentation parameters
-        self._params.segmentation.buffer_size = (
-            self.get_parameter("segmentation.buffer_size")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.segmentation.model_type = (
-            self.get_parameter("segmentation.model_type")
-            .get_parameter_value()
-            .string_value
-        )
         self._params.segmentation.device = (
             self.get_parameter("segmentation.device").get_parameter_value().string_value
         )
-        self._params.segmentation.sam_checkpoint_path = (
-            self.get_parameter("segmentation.sam_checkpoint_path")
+        self._params.segmentation.n_positive_samples = (
+            self.get_parameter("segmentation.n_positive_samples")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.segmentation.n_negative_samples = (
+            self.get_parameter("segmentation.n_negative_samples")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.segmentation.model_id = (
+            self.get_parameter("segmentation.model_id")
             .get_parameter_value()
             .string_value
         )
-        if not os.path.exists(self._params.segmentation.sam_checkpoint_path):
-            self.get_logger().error(
-                f"Path to SAM checkpoint does not exist: {self._params.segmentation.sam_checkpoint_path}"
-            )
-
-        # registration parameters
-        self._params.registration.erosion_kernel_size = (
-            self.get_parameter("registration.erosion_kernel_size")
-            .get_parameter_value()
-            .integer_value
+        self._params.segmentation.pth = (
+            self.get_parameter("segmentation.pth").get_parameter_value().double_value
         )
-        self._params.registration.convex_hull = (
-            self.get_parameter("registration.convex_hull")
+
+        # robot model parameters
+        self._params.robot_model.device = (
+            self.get_parameter("robot_model.device").get_parameter_value().string_value
+        )
+        self._params.robot_model.root_link_name = (
+            self.get_parameter("robot_model.root_link_name")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.robot_model.end_link_name = (
+            self.get_parameter("robot_model.end_link_name")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.robot_model.visual_meshes = (
+            self.get_parameter("robot_model.visual_meshes")
             .get_parameter_value()
             .bool_value
         )
-        self._params.registration.number_of_points = (
-            self.get_parameter("registration.number_of_points")
+
+        # registration: hydra icp parameters
+        self._params.registration.hydra_icp.erosion_kernel_size = (
+            self.get_parameter("registration.hydra_icp.erosion_kernel_size")
             .get_parameter_value()
             .integer_value
         )
-        self._params.registration.device = (
-            self.get_parameter("registration.device").get_parameter_value().string_value
+        self._params.registration.hydra_icp.number_of_points = (
+            self.get_parameter("registration.hydra_icp.number_of_points")
+            .get_parameter_value()
+            .integer_value
         )
-        self._params.registration.max_distance = (
-            self.get_parameter("registration.max_distance")
+        self._params.registration.hydra_icp.max_distance = (
+            self.get_parameter("registration.hydra_icp.max_distance")
             .get_parameter_value()
             .double_value
         )
-        self._params.registration.outer_max_iter = (
-            self.get_parameter("registration.outer_max_iter")
+        self._params.registration.hydra_icp.outer_max_iter = (
+            self.get_parameter("registration.hydra_icp.outer_max_iter")
             .get_parameter_value()
             .integer_value
         )
-        self._params.registration.inner_max_iter = (
-            self.get_parameter("registration.inner_max_iter")
+        self._params.registration.hydra_icp.inner_max_iter = (
+            self.get_parameter("registration.hydra_icp.inner_max_iter")
             .get_parameter_value()
             .integer_value
         )
-        self._params.registration.rmse_change = (
-            self.get_parameter("registration.rmse_change")
+        self._params.registration.hydra_icp.rmse_change = (
+            self.get_parameter("registration.hydra_icp.rmse_change")
             .get_parameter_value()
             .double_value
         )
+
+        # registration: stereo dr parameters
+        self._params.registration.stereo_dr.optimizer = (
+            self.get_parameter(" #registration.stereo_dr.optimizer")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.registration.stereo_dr.lr = (
+            self.get_parameter("registration.stereo_dr.lr")
+            .get_parameter_value()
+            .double_value
+        )
+        self._params.registration.stereo_dr.epochs = (
+            self.get_parameter("registration.stereo_dr.epochs")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.registration.stereo_dr.step_size = (
+            self.get_parameter("registration.stereo_dr.step_size")
+            .get_parameter_value()
+            .integer_value
+        )
+        self._params.registration.stereo_dr.gamma = (
+            self.get_parameter("registration.stereo_dr.gamma")
+            .get_parameter_value()
+            .double_value
+        )
+
         self._params.tf_broadcaster.parent_frame = (
             self.get_parameter("tf_broadcaster.parent_frame")
             .get_parameter_value()
@@ -386,48 +346,75 @@ class RoboregServer(Node):
         self.get_logger().info(
             f"*{' '*9}QoS reliability: {self._params.joint_state_topic.qos_reliability}"
         )
-        self.get_logger().info(f"*{' '*7}Point cloud:")
-        self.get_logger().info(f"*{' '*9}Name: {self._params.point_cloud_topic.name}")
+        self.get_logger().info(f"*{' '*7}Depth:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.depth_topic.name}")
         self.get_logger().info(
-            f"*{' '*9}QoS reliability: {self._params.point_cloud_topic.qos_reliability}"
+            f"*{' '*9}QoS reliability: {self._params.depth_topic.qos_reliability}"
         )
         self.get_logger().info(f"*{' '*7}Robot description:")
         self.get_logger().info(
             f"*{' '*9}Name: {self._params.robot_description_topic.name}"
         )
         self.get_logger().info(f"*{' '*5}Segmentation:")
-        self.get_logger().info(
-            f"*{' '*7}Buffer size: {self._params.segmentation.buffer_size}"
-        )
-        self.get_logger().info(
-            f"*{' '*7}Model type: {self._params.segmentation.model_type}"
-        )
         self.get_logger().info(f"*{' '*7}Device: {self._params.segmentation.device}")
         self.get_logger().info(
-            f"*{' '*7}SAM checkpoint path: {self._params.segmentation.sam_checkpoint_path}"
+            f"*{' '*7}N positive samples: {self._params.segmentation.n_positive_samples}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}N negative samples: {self._params.segmentation.n_negative_samples}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Model ID: {self._params.segmentation.model_id}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Probability threshold: {self._params.segmentation.pth}"
+        )
+        self.get_logger().info(f"*{' '*5}Robot model:")
+        self.get_logger().info(f"*{' '*7}Device: {self._params.robot_model.device}")
+        self.get_logger().info(
+            f"*{' '*7}Root link name: {self._params.robot_model.root_link_name}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}End link name: {self._params.robot_model.end_link_name}"
+        )
+        self.get_logger().info(
+            f"*{' '*7}Visual meshes: {self._params.robot_model.visual_meshes}"
         )
         self.get_logger().info(f"*{' '*5}Registration:")
+        self.get_logger().info(f"*{' '*7}Hydra ICP:")
         self.get_logger().info(
-            f"*{' '*7}Erosion kernel size: {self._params.registration.erosion_kernel_size}"
+            f"*{' '*9}Erosion kernel size: {self._params.registration.hydra_icp.erosion_kernel_size}"
         )
         self.get_logger().info(
-            f"*{' '*7}Convex hull: {self._params.registration.convex_hull}"
+            f"*{' '*9}Number of points: {self._params.registration.hydra_icp.number_of_points}"
         )
         self.get_logger().info(
-            f"*{' '*7}Number of points: {self._params.registration.number_of_points}"
-        )
-        self.get_logger().info(f"*{' '*7}Device: {self._params.registration.device}")
-        self.get_logger().info(
-            f"*{' '*7}Max distance: {self._params.registration.max_distance}"
+            f"*{' '*9}Max distance: {self._params.registration.hydra_icp.max_distance}"
         )
         self.get_logger().info(
-            f"*{' '*7}Outer max iterations: {self._params.registration.outer_max_iter}"
+            f"*{' '*9}Outer max iterations: {self._params.registration.hydra_icp.outer_max_iter}"
         )
         self.get_logger().info(
-            f"*{' '*7}Inner max iterations: {self._params.registration.inner_max_iter}"
+            f"*{' '*9}Inner max iterations: {self._params.registration.hydra_icp.inner_max_iter}"
         )
         self.get_logger().info(
-            f"*{' '*7}RMSE change: {self._params.registration.rmse_change}"
+            f"*{' '*9}RMSE change: {self._params.registration.hydra_icp.rmse_change}"
+        )
+        self.get_logger().info(f"*{' '*7}Stereo DR:")
+        self.get_logger().info(
+            f"*{' '*9}Optimizer: {self._params.registration.stereo_dr.optimizer}"
+        )
+        self.get_logger().info(
+            f"*{' '*9}Learning rate: {self._params.registration.stereo_dr.lr}"
+        )
+        self.get_logger().info(
+            f"*{' '*9}Epochs: {self._params.registration.stereo_dr.epochs}"
+        )
+        self.get_logger().info(
+            f"*{' '*9}Step size: {self._params.registration.stereo_dr.step_size}"
+        )
+        self.get_logger().info(
+            f"*{' '*9}Gamma: {self._params.registration.stereo_dr.gamma}"
         )
         self.get_logger().info(f"*{' '*5}TF broadcaster:")
         self.get_logger().info(
@@ -464,12 +451,10 @@ class RoboregServer(Node):
                 self._params.joint_state_topic.name = parameter.value
                 self._create_joint_state_subscription()
                 self._create_approximate_time_sync()
-            elif parameter.name == "topics.point_cloud.name":
-                self.get_logger().info(
-                    f"Setting point cloud topic to {parameter.value}"
-                )
-                self._params.point_cloud_topic.name = parameter.value
-                self._create_point_cloud_subscription()
+            elif parameter.name == "topics.depth.name":
+                self.get_logger().info(f"Setting depth topic to {parameter.value}")
+                self._params.depth_topic.name = parameter.value
+                self._create_depth_subscription()
                 self._create_approximate_time_sync()
             elif parameter.name == "topics.robot_description.name":
                 self.get_logger().info(
@@ -494,8 +479,11 @@ class RoboregServer(Node):
         self._clear_samples_service = self.create_service(
             Trigger, "~/clear_samples", self._on_clear_samples
         )
-        self._register_service = self.create_service(
-            Trigger, "~/register", self._on_register
+        self._hydra_icp_register_service = self.create_service(
+            Trigger, "~/register/hydra_icp", self._on_hydra_icp_register
+        )
+        self._stereo_dr_register_service = self.create_service(
+            Trigger, "~/register/stereo_dr", self._on_stereo_dr_register
         )
         self._export_samples_service = self.create_service(
             Export,
@@ -567,18 +555,18 @@ class RoboregServer(Node):
             qos_profile=qos_profile,
         )
 
-    def _create_point_cloud_subscription(self) -> None:
-        if self._point_cloud_sub is not None:
-            self.destroy_subscription(self._point_cloud_sub)
+    def _create_depth_subscription(self) -> None:
+        if self._depth_sub is not None:
+            self.destroy_subscription(self._depth_sub)
         qos_profile = qos_profile_system_default  # careful, this creates a copy of the system default qos profile
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._params.point_cloud_topic.qos_reliability
+            ReliabilityPolicy, self._params.depth_topic.qos_reliability
         )
         qos_profile.durability = DurabilityPolicy.VOLATILE
-        self._point_cloud_sub = Subscriber(
+        self._depth_sub = Subscriber(
             self,
-            PointCloud2,
-            self._params.point_cloud_topic.name,
+            Image,
+            self._params.depth_topic.name,
             qos_profile=qos_profile,
         )
 
@@ -590,7 +578,7 @@ class RoboregServer(Node):
                 self._image_sub,
                 self._camera_info_sub,
                 self._joint_state_sub,
-                self._point_cloud_sub,
+                self._depth_sub,
             ],
             queue_size=1,
             slop=self._params.filters.sync_accuracy,
@@ -613,7 +601,7 @@ class RoboregServer(Node):
         self._create_camera_info_subscription()
         self._create_image_subscription()
         self._create_joint_state_subscription()
-        self._create_point_cloud_subscription()
+        self._create_depth_subscription()
 
         # topic synchronizer
         self._create_approximate_time_sync()
@@ -626,18 +614,51 @@ class RoboregServer(Node):
         image: Image,
         camera_info: CameraInfo,
         joint_state: JointState,
-        point_cloud: PointCloud2,
+        depth: Image,
     ):
         self._synced_sample.image = image
         self._synced_sample.camera_info = camera_info
         self._synced_sample.joint_state = joint_state
-        self._synced_sample.point_cloud = point_cloud
+        self._synced_sample.depth = depth
 
     def _on_robot_description(self, msg: String) -> None:
         self.get_logger().info("Received robot description.")
         self._robot_description = msg.data
-        self._o3d_robot = O3DRobot(
-            self._robot_description, self._params.registration.convex_hull
+
+        # instantiate urdf parser
+        self._urdf_parser = URDFParser()
+        self._urdf_parser.from_urdf(self._robot_description)
+        if self._params.robot_model.root_link_name == "":
+            self._params.robot_model.root_link_name = (
+                self._urdf_parser.link_names_with_meshes[0]
+            )
+            self.get_logger().info(
+                f"Root link name not provided. Using the first link with mesh: '{self._params.robot_model.root_link_name}'."
+            )
+        if self._params.robot_model.end_link_name == "":
+            self._params.robot_model.end_link_name = (
+                self._urdf_parser.link_names_with_meshes[-1]
+            )
+            self.get_logger().info(
+                f"End link name not provided. Using the last link with mesh: '{self._params.robot_model.end_link_name}'."
+            )
+
+        # instantiate kinematics
+        self._kinematics = rrd.TorchKinematics(
+            urdf_parser=self._urdf_parser,
+            root_link_name=self._params.robot_model.root_link_name,
+            end_link_name=self._params.robot_model.end_link_name,
+            device=self._params.robot_model.device,
+        )
+
+        # instantiate meshes
+        self._meshes = rrd.TorchMeshContainer(
+            self._urdf_parser.ros_package_mesh_paths(
+                root_link_name=self._params.robot_model.root_link_name,
+                end_link_name=self._params.robot_model.end_link_name,
+            ),
+            batch_size=1,  # this might require dynamic re-configuration depending on the registration and number of samples
+            device=self._params.robot_model.device,
         )
 
     def _on_collect_sample(
@@ -648,7 +669,7 @@ class RoboregServer(Node):
                 self._synced_sample.image is None
                 or self._synced_sample.camera_info is None
                 or self._synced_sample.joint_state is None
-                or self._synced_sample.point_cloud is None
+                or self._synced_sample.depth is None
             ):
                 response.success = False
                 response.n_collected = len(self._synced_samples)
@@ -704,7 +725,7 @@ class RoboregServer(Node):
         self.get_logger().info(response.message)
         return response
 
-    def _on_register(
+    def _on_hydra_icp_register(
         self, request: Trigger.Request, response: Trigger.Response
     ) -> Trigger.Response:
         if len(self._synced_samples) == 0:
@@ -714,11 +735,6 @@ class RoboregServer(Node):
         if not self._robot_description:
             response.success = False
             response.message = "No robot description available"
-            return response
-        if not os.path.exists(self._params.segmentation.sam_checkpoint_path):
-            response.success = False
-            response.message = f"Path to SAM checkpoint does not exist: {self._params.segmentation.sam_checkpoint_path}"
-            self.get_logger().error(response.message)
             return response
 
         try:
@@ -733,7 +749,7 @@ class RoboregServer(Node):
                 self.get_logger().info(
                     f"Loading SAM model from {self._params.segmentation.sam_checkpoint_path}"
                 )
-                segmentor = SamSegmentor(
+                segmentation = SamSegmentor(
                     sam_checkpoint=self._params.segmentation.sam_checkpoint_path,
                     model_type=self._params.segmentation.model_type,
                     device=self._params.segmentation.device,
@@ -749,16 +765,16 @@ class RoboregServer(Node):
                     self.get_logger().info(
                         f"Annotated [{idx+1}/{len(self._synced_samples)}] images"
                     )
-                    mask = segmentor(image, np.array(points), np.array(labels))
+                    mask = segmentation(image, np.array(points), np.array(labels))
                     masks.append((mask * 255.0).astype(np.uint8))
                 self.get_logger().info("Segmentation done")
 
                 # delete model from gpu
-                del segmentor
+                del segmentation
                 torch.cuda.empty_cache()
                 return masks
 
-            # remove segmentor from gpu
+            # remove segmentation from gpu
             masks = detect_and_segment()
 
             # prepare point clouds
@@ -838,55 +854,10 @@ class RoboregServer(Node):
 
         return response
 
-    def _point_cloud_to_numpy(
-        self,
-        point_cloud: PointCloud2,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        self.get_logger().info("Converting point cloud to numpy")
-        self.get_logger().info(
-            f"Point cloud shape: {point_cloud.height} x {point_cloud.width}"
-        )
-        data = np.array(point_cloud.data, dtype=np.uint8)
-
-        # offset + byte, step size = 4 * 4 bytes
-        x_b0, x_b1, x_b2, x_b3 = (
-            data[point_cloud.fields[0].offset + 0 :: point_cloud.point_step],
-            data[point_cloud.fields[0].offset + 1 :: point_cloud.point_step],
-            data[point_cloud.fields[0].offset + 2 :: point_cloud.point_step],
-            data[point_cloud.fields[0].offset + 3 :: point_cloud.point_step],
-        )
-        y_b0, y_b1, y_b2, y_b3 = (
-            data[point_cloud.fields[1].offset + 0 :: point_cloud.point_step],
-            data[point_cloud.fields[1].offset + 1 :: point_cloud.point_step],
-            data[point_cloud.fields[1].offset + 2 :: point_cloud.point_step],
-            data[point_cloud.fields[1].offset + 3 :: point_cloud.point_step],
-        )
-        z_b0, z_b1, z_b2, z_b3 = (
-            data[point_cloud.fields[2].offset + 0 :: point_cloud.point_step],
-            data[point_cloud.fields[2].offset + 1 :: point_cloud.point_step],
-            data[point_cloud.fields[2].offset + 2 :: point_cloud.point_step],
-            data[point_cloud.fields[2].offset + 3 :: point_cloud.point_step],
-        )
-        rgb_b0, rgb_b1, rgb_b2, rgb_b3 = (
-            data[point_cloud.fields[3].offset + 0 :: point_cloud.point_step],
-            data[point_cloud.fields[3].offset + 1 :: point_cloud.point_step],
-            data[point_cloud.fields[3].offset + 2 :: point_cloud.point_step],
-            data[point_cloud.fields[3].offset + 3 :: point_cloud.point_step],
-        )
-
-        x = np.stack([x_b0, x_b1, x_b2, x_b3], axis=1)
-        y = np.stack([y_b0, y_b1, y_b2, y_b3], axis=1)
-        z = np.stack([z_b0, z_b1, z_b2, z_b3], axis=1)
-        rgba = np.stack([rgb_b0, rgb_b1, rgb_b2, rgb_b3], axis=1)
-
-        height, width = point_cloud.height, point_cloud.width
-
-        x = x.flatten().view(dtype=np.float32).reshape((height, width))
-        y = y.flatten().view(dtype=np.float32).reshape((height, width))
-        z = z.flatten().view(dtype=np.float32).reshape((height, width))
-        rgba = rgba.reshape((height, width, 4))
-
-        return np.stack([x, y, z], axis=-1), rgba
+    def _on_stereo_dr_register(
+        self, request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
+        return response
 
     def _on_export_samples(
         self, request: Export.Request, response: Export.Response
@@ -952,6 +923,8 @@ class RoboregServer(Node):
                             x for _, x in sorted(zip(name, joint_position))
                         ]
                         joint_position_np = np.array(joint_position)
+
+                        # TODO: handle depth image and converted point cloud export...
                         xyz_np, rgba_np = self._point_cloud_to_numpy(
                             synced_data.point_cloud
                         )
@@ -968,10 +941,6 @@ class RoboregServer(Node):
                         np.save(
                             os.path.join(path, f"xyz_{idx}.npy"),
                             xyz_np,
-                        )
-                        np.save(
-                            os.path.join(path, f"rgba_{idx}.npy"),
-                            rgba_np,
                         )
                 self._synced_samples.clear()
 

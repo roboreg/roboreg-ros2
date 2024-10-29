@@ -12,10 +12,9 @@ Display::Display() : roboreg_node_name_("roboreg") {
       rosidl_generator_traits::name<sensor_msgs::msg::JointState>(),
       "Topic under which the joint states are published.", this, SLOT(updateJointStateTopic()),
       this);
-  point_cloud_topic_property_ = new rviz_common::properties::RosTopicProperty(
-      "Point Cloud Topic", "point_cloud/cloud_registered",
-      rosidl_generator_traits::name<sensor_msgs::msg::PointCloud2>(),
-      "Topic under which the point cloud is published.", this, SLOT(updatePointCloudTopic()), this);
+  depth_topic_property_ = new rviz_common::properties::RosTopicProperty(
+      "Depth Topic", "depth/registered", rosidl_generator_traits::name<sensor_msgs::msg::Image>(),
+      "Topic under which the depth is published.", this, SLOT(updatePointCloudTopic()), this);
   roboreg_node_name_property_ = new rviz_common::properties::StringProperty(
       "Roboreg Node Name", roboreg_node_name_.c_str(),
       "The node name under which the roboreg server lives.", this, SLOT(updateRoboregNodeNode()),
@@ -37,7 +36,7 @@ void Display::onInitialize() {
   // initialize properties
   robot_description_topic_property_->initialize(node_abstraction);
   joint_state_topic_property_->initialize(node_abstraction);
-  point_cloud_topic_property_->initialize(node_abstraction);
+  depth_topic_property_->initialize(node_abstraction);
 
   // add a collect data and save synced data widgets
   auto widget = new QWidget();
@@ -66,9 +65,9 @@ void Display::updateJointStateTopic() {
 }
 
 void Display::updatePointCloudTopic() {
-  auto topic = point_cloud_topic_property_->getStdString();
-  RCLCPP_INFO(node_ptr_->get_logger(), "Updating point cloud topic to: %s", topic.c_str());
-  parameters_client_->set_parameters({rclcpp::Parameter("topics.point_cloud.name", topic)});
+  auto topic = depth_topic_property_->getStdString();
+  RCLCPP_INFO(node_ptr_->get_logger(), "Updating depth topic to: %s", topic.c_str());
+  parameters_client_->set_parameters({rclcpp::Parameter("topics.depth.name", topic)});
 }
 
 void Display::updateRoboregNodeNode() {

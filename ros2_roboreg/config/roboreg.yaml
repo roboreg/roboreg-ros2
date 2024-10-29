@@ -15,27 +15,39 @@
       joint_state:
         name: /joint_states
         qos_reliability: BEST_EFFORT
-      point_cloud:
-        name: /point_cloud/cloud_registered
+      depth:
+        name: /depth/registered
         qos_reliability: BEST_EFFORT
       robot_description:
         name: /robot_description
 
     segmentation:
-      buffer_size: 5
-      model_type: vit_h
       device: cuda
-      sam_checkpoint_path: ""
+      n_positive_samples: 5
+      n_negative_samples: 5
+      model_id: facebook/sam2-hiera-large
+      pth: 0.5
+
+    robot_model:
+      device: cuda
+      root_link_name: ""
+      end_link_name: ""
+      visual_meshes: False
 
     registration:
-      erosion_kernel_size: 10
-      convex_hull: True
-      number_of_points: 5000
-      device: cuda
-      max_distance: 0.1
-      outer_max_iter: 100
-      inner_max_iter: 3
-      rmse_change: 1.0e-6
+      hydra_icp:
+        erosion_kernel_size: 10
+        number_of_points: 5000
+        max_distance: 0.1
+        outer_max_iter: 100
+        inner_max_iter: 3
+        rmse_change: 1.0e-6
+      stereo_dr:
+        optimizer: SGD
+        lr: 0.001
+        epochs: 100
+        step_size: 100
+        gamma: 1.0
 
     tf_broadcaster:
       parent_frame: world
