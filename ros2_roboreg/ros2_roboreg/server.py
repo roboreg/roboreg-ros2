@@ -60,8 +60,10 @@ class RoboregServer(Node):
         self.add_on_set_parameters_callback(self._on_set_parameter)
 
         # subscriptions
-        self._camera_info_sub = None
-        self._image_sub = None
+        self._left_camera_info_sub = None
+        self._left_image_sub = None
+        self._right_camera_info_sub = None
+        self._right_image_sub = None
         self._joint_state_sub = None
         self._depth_sub = None
         self._approximate_time_sync = None
@@ -82,10 +84,14 @@ class RoboregServer(Node):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("topics.image.name", "left/image_rect_color"),
-                ("topics.image.qos_reliability", "RELIABLE"),
-                ("topics.camera_info.name", "left/camera_info"),
-                ("topics.camera_info.qos_reliability", "RELIABLE"),
+                ("topics.image.left.name", "left/image_rect_color"),
+                ("topics.image.left.qos_reliability", "RELIABLE"),
+                ("topics.camera_info.left.name", "left/camera_info"),
+                ("topics.camera_info.left.qos_reliability", "RELIABLE"),
+                ("topics.image.right.name", "right/image_rect_color"),
+                ("topics.image.right.qos_reliability", "RELIABLE"),
+                ("topics.camera_info.right.name", "right/camera_info"),
+                ("topics.camera_info.right.qos_reliability", "RELIABLE"),
                 ("topics.joint_state.name", "joint_state"),
                 ("topics.joint_state.qos_reliability", "RELIABLE"),
                 ("topics.depth.name", "depth/registered"),
@@ -110,22 +116,6 @@ class RoboregServer(Node):
                 ("robot_model.root_link_name", ""),
                 ("robot_model.end_link_name", ""),
                 ("robot_model.visual_meshes", False),
-            ],
-        )
-        self.declare_parameters(
-            namespace="",
-            parameters=[
-                ("registration.hydra_icp.erosion_kernel_size", 10),
-                ("registration.hydra_icp.number_of_points", 5000),
-                ("registration.hydra_icp.max_distance", 0.1),
-                ("registration.hydra_icp.outer_max_iter", 100),
-                ("registration.hydra_icp.inner_max_iter", 3),
-                ("registration.hydra_icp.rmse_change", 1.0e-6),
-                ("registration.stereo_dr.optimizer", "SGD"),
-                ("registration.stereo_dr.lr", 0.001),
-                ("registration.stereo_dr.epochs", 100),
-                ("registration.stereo_dr.step_size", 100),
-                ("registration.stereo_dr.gamma", 1),
             ],
         )
         self.declare_parameters(
@@ -157,21 +147,39 @@ class RoboregServer(Node):
         )
 
         # topic parameters
-        self._params.image_topic.name = (
-            self.get_parameter("topics.image.name").get_parameter_value().string_value
+        self._params.left_image_topic.name = (
+            self.get_parameter("topics.image.left.name").get_parameter_value().string_value
         )
-        self._params.image_topic.qos_reliability = (
-            self.get_parameter("topics.image.qos_reliability")
+        self._params.left_image_topic.qos_reliability = (
+            self.get_parameter("topics.image.left.qos_reliability")
             .get_parameter_value()
             .string_value
         )
-        self._params.camera_info_topic.name = (
-            self.get_parameter("topics.camera_info.name")
+        self._params.left_camera_info_topic.name = (
+            self.get_parameter("topics.camera_info.left.name")
             .get_parameter_value()
             .string_value
         )
-        self._params.camera_info_topic.qos_reliability = (
-            self.get_parameter("topics.camera_info.qos_reliability")
+        self._params.left_camera_info_topic.qos_reliability = (
+            self.get_parameter("topics.camera_info.left.qos_reliability")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.right_image_topic.name = (
+            self.get_parameter("topics.image.right.name").get_parameter_value().string_value
+        )
+        self._params.right_image_topic.qos_reliability = (
+            self.get_parameter("topics.image.right.qos_reliability")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.right_camera_info_topic.name = (
+            self.get_parameter("topics.camera_info.right.name")
+            .get_parameter_value()
+            .string_value
+        )
+        self._params.right_camera_info_topic.qos_reliability = (
+            self.get_parameter("topics.camera_info.right.qos_reliability")
             .get_parameter_value()
             .string_value
         )
@@ -243,65 +251,7 @@ class RoboregServer(Node):
             .bool_value
         )
 
-        # registration: hydra icp parameters
-        self._params.registration.hydra_icp.erosion_kernel_size = (
-            self.get_parameter("registration.hydra_icp.erosion_kernel_size")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.registration.hydra_icp.number_of_points = (
-            self.get_parameter("registration.hydra_icp.number_of_points")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.registration.hydra_icp.max_distance = (
-            self.get_parameter("registration.hydra_icp.max_distance")
-            .get_parameter_value()
-            .double_value
-        )
-        self._params.registration.hydra_icp.outer_max_iter = (
-            self.get_parameter("registration.hydra_icp.outer_max_iter")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.registration.hydra_icp.inner_max_iter = (
-            self.get_parameter("registration.hydra_icp.inner_max_iter")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.registration.hydra_icp.rmse_change = (
-            self.get_parameter("registration.hydra_icp.rmse_change")
-            .get_parameter_value()
-            .double_value
-        )
-
-        # registration: stereo dr parameters
-        self._params.registration.stereo_dr.optimizer = (
-            self.get_parameter(" #registration.stereo_dr.optimizer")
-            .get_parameter_value()
-            .string_value
-        )
-        self._params.registration.stereo_dr.lr = (
-            self.get_parameter("registration.stereo_dr.lr")
-            .get_parameter_value()
-            .double_value
-        )
-        self._params.registration.stereo_dr.epochs = (
-            self.get_parameter("registration.stereo_dr.epochs")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.registration.stereo_dr.step_size = (
-            self.get_parameter("registration.stereo_dr.step_size")
-            .get_parameter_value()
-            .integer_value
-        )
-        self._params.registration.stereo_dr.gamma = (
-            self.get_parameter("registration.stereo_dr.gamma")
-            .get_parameter_value()
-            .double_value
-        )
-
+        # tf broadcaster parameters
         self._params.tf_broadcaster.parent_frame = (
             self.get_parameter("tf_broadcaster.parent_frame")
             .get_parameter_value()
@@ -331,15 +281,25 @@ class RoboregServer(Node):
             f"*{' '*7}Min joint position change: {self._params.filters.min_joint_position_change} rad"
         )
         self.get_logger().info(f"*{' '*5}Topics:")
-        self.get_logger().info(f"*{' '*7}Image:")
-        self.get_logger().info(f"*{' '*9}Name: {self._params.image_topic.name}")
+        self.get_logger().info(f"*{' '*7}Left image:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.left_image_topic.name}")
         self.get_logger().info(
-            f"*{' '*9}QoS reliability: {self._params.image_topic.qos_reliability}."
+            f"*{' '*9}QoS reliability: {self._params.left_image_topic.qos_reliability}."
         )
-        self.get_logger().info(f"*{' '*7}Camera info:")
-        self.get_logger().info(f"*{' '*9}Name: {self._params.camera_info_topic.name}")
+        self.get_logger().info(f"*{' '*7}Left camera info:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.left_camera_info_topic.name}")
         self.get_logger().info(
-            f"*{' '*9}QoS reliability: {self._params.camera_info_topic.qos_reliability}"
+            f"*{' '*9}QoS reliability: {self._params.left_camera_info_topic.qos_reliability}"
+        )
+        self.get_logger().info(f"*{' '*7}Right image:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.right_image_topic.name}")
+        self.get_logger().info(
+            f"*{' '*9}QoS reliability: {self._params.right_image_topic.qos_reliability}."
+        )
+        self.get_logger().info(f"*{' '*7}Right camera info:")
+        self.get_logger().info(f"*{' '*9}Name: {self._params.right_camera_info_topic.name}")
+        self.get_logger().info(
+            f"*{' '*9}QoS reliability: {self._params.right_camera_info_topic.qos_reliability}"
         )
         self.get_logger().info(f"*{' '*7}Joint states:")
         self.get_logger().info(f"*{' '*9}Name: {self._params.joint_state_topic.name}")
@@ -364,7 +324,7 @@ class RoboregServer(Node):
             f"*{' '*7}N negative samples: {self._params.segmentation.n_negative_samples}"
         )
         self.get_logger().info(
-            f"*{' '*7}Model ID: {self._params.segmentation.model_id}"
+            f"*{' '*7}Model ID: '{self._params.segmentation.model_id}'"
         )
         self.get_logger().info(
             f"*{' '*7}Probability threshold: {self._params.segmentation.pth}"
@@ -372,59 +332,23 @@ class RoboregServer(Node):
         self.get_logger().info(f"*{' '*5}Robot model:")
         self.get_logger().info(f"*{' '*7}Device: {self._params.robot_model.device}")
         self.get_logger().info(
-            f"*{' '*7}Root link name: {self._params.robot_model.root_link_name}"
+            f"*{' '*7}Root link name: '{self._params.robot_model.root_link_name}'"
         )
         self.get_logger().info(
-            f"*{' '*7}End link name: {self._params.robot_model.end_link_name}"
+            f"*{' '*7}End link name: '{self._params.robot_model.end_link_name}'"
         )
         self.get_logger().info(
             f"*{' '*7}Visual meshes: {self._params.robot_model.visual_meshes}"
         )
-        self.get_logger().info(f"*{' '*5}Registration:")
-        self.get_logger().info(f"*{' '*7}Hydra ICP:")
-        self.get_logger().info(
-            f"*{' '*9}Erosion kernel size: {self._params.registration.hydra_icp.erosion_kernel_size}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Number of points: {self._params.registration.hydra_icp.number_of_points}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Max distance: {self._params.registration.hydra_icp.max_distance}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Outer max iterations: {self._params.registration.hydra_icp.outer_max_iter}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Inner max iterations: {self._params.registration.hydra_icp.inner_max_iter}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}RMSE change: {self._params.registration.hydra_icp.rmse_change}"
-        )
-        self.get_logger().info(f"*{' '*7}Stereo DR:")
-        self.get_logger().info(
-            f"*{' '*9}Optimizer: {self._params.registration.stereo_dr.optimizer}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Learning rate: {self._params.registration.stereo_dr.lr}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Epochs: {self._params.registration.stereo_dr.epochs}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Step size: {self._params.registration.stereo_dr.step_size}"
-        )
-        self.get_logger().info(
-            f"*{' '*9}Gamma: {self._params.registration.stereo_dr.gamma}"
-        )
         self.get_logger().info(f"*{' '*5}TF broadcaster:")
         self.get_logger().info(
-            f"*{' '*7}Parent frame: {self._params.tf_broadcaster.parent_frame}"
+            f"*{' '*7}Parent frame: '{self._params.tf_broadcaster.parent_frame}'"
         )
         self.get_logger().info(
-            f"*{' '*7}Child frame: {self._params.tf_broadcaster.child_frame}"
+            f"*{' '*7}Child frame: '{self._params.tf_broadcaster.child_frame}'"
         )
         self.get_logger().info(
-            f"*{' '*7}Target child frame: {self._params.tf_broadcaster.target_child_frame}"
+            f"*{' '*7}Target child frame: '{self._params.tf_broadcaster.target_child_frame}'"
         )
         self.get_logger().info("***")
 
@@ -432,17 +356,29 @@ class RoboregServer(Node):
         result = SetParametersResult()
         result.successful = True
         for parameter in parameters:
-            if parameter.name == "topics.camera_info.name":
+            if parameter.name == "topics.camera_info.left.name":
                 self.get_logger().info(
-                    f"Setting camera info topic to {parameter.value}"
+                    f"Setting left camera info topic to {parameter.value}"
                 )
-                self._params.camera_info_topic.name = parameter.value
-                self._create_camera_info_subscription()
+                self._params.left_camera_info_topic.name = parameter.value
+                self._create_left_camera_info_subscription()
                 self._create_approximate_time_sync()
-            elif parameter.name == "topics.image.name":
-                self.get_logger().info(f"Setting image topic to {parameter.value}")
-                self._params.image_topic.name = parameter.value
-                self._create_image_subscription()
+            elif parameter.name == "topics.camera_info.right.name":
+                self.get_logger().info(
+                    f"Setting right camera info topic to {parameter.value}"
+                )
+                self._params.right_camera_info_topic.name = parameter.value
+                self._create_right_camera_info_subscription()
+                self._create_approximate_time_sync()
+            elif parameter.name == "topics.image.left.name":
+                self.get_logger().info(f"Setting left image topic to {parameter.value}")
+                self._params.left_image_topic.name = parameter.value
+                self._create_left_image_subscription()
+                self._create_approximate_time_sync()
+            elif parameter.name == "topics.image.right.name":
+                self.get_logger().info(f"Setting right image topic to {parameter.value}")
+                self._params.right_image_topic.name = parameter.value
+                self._create_right_image_subscription()
                 self._create_approximate_time_sync()
             elif parameter.name == "topics.joint_state.name":
                 self.get_logger().info(
@@ -510,33 +446,63 @@ class RoboregServer(Node):
             callback_group=callback_group,
         )
 
-    def _create_camera_info_subscription(self) -> None:
-        if self._camera_info_sub is not None:
-            self.destroy_subscription(self._camera_info_sub)
+    def _create_left_camera_info_subscription(self) -> None:
+        if self._left_camera_info_sub is not None:
+            self.destroy_subscription(self._left_camera_info_sub)
         qos_profile = qos_profile_system_default
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._params.camera_info_topic.qos_reliability
+            ReliabilityPolicy, self._params.left_camera_info_topic.qos_reliability
         )
         qos_profile.durability = DurabilityPolicy.VOLATILE
-        self._camera_info_sub = Subscriber(
+        self._left_camera_info_sub = Subscriber(
             self,
             CameraInfo,
-            self._params.camera_info_topic.name,
+            self._params.left_camera_info_topic.name,
             qos_profile=qos_profile,
         )
 
-    def _create_image_subscription(self) -> None:
-        if self._image_sub is not None:
-            self.destroy_subscription(self._image_sub)
+    def _create_right_camera_info_subscription(self) -> None:
+        if self._right_camera_info_sub is not None:
+            self.destroy_subscription(self._right_camera_info_sub)
         qos_profile = qos_profile_system_default
         qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._params.image_topic.qos_reliability
+            ReliabilityPolicy, self._params.right_camera_info_topic.qos_reliability
         )
         qos_profile.durability = DurabilityPolicy.VOLATILE
-        self._image_sub = Subscriber(
+        self._right_camera_info_sub = Subscriber(
+            self,
+            CameraInfo,
+            self._params.right_camera_info_topic.name,
+            qos_profile=qos_profile,
+        )
+
+    def _create_left_image_subscription(self) -> None:
+        if self._left_image_sub is not None:
+            self.destroy_subscription(self._left_image_sub)
+        qos_profile = qos_profile_system_default
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._params.left_image_topic.qos_reliability
+        )
+        qos_profile.durability = DurabilityPolicy.VOLATILE
+        self._left_image_sub = Subscriber(
             self,
             Image,
-            self._params.image_topic.name,
+            self._params.left_image_topic.name,
+            qos_profile=qos_profile,
+        )
+
+    def _create_right_image_subscription(self) -> None:
+        if self._right_image_sub is not None:
+            self.destroy_subscription(self._right_image_sub)
+        qos_profile = qos_profile_system_default
+        qos_profile.reliability = getattr(
+            ReliabilityPolicy, self._params.right_image_topic.qos_reliability
+        )
+        qos_profile.durability = DurabilityPolicy.VOLATILE
+        self._right_image_sub = Subscriber(
+            self,
+            Image,
+            self._params.right_image_topic.name,
             qos_profile=qos_profile,
         )
 
@@ -575,8 +541,10 @@ class RoboregServer(Node):
             self._approximate_time_sync = None
         self._approximate_time_sync = ApproximateTimeSynchronizer(
             [
-                self._image_sub,
-                self._camera_info_sub,
+                self._left_image_sub,
+                self._left_camera_info_sub,
+                self._right_image_sub,
+                self._right_camera_info_sub,
                 self._joint_state_sub,
                 self._depth_sub,
             ],
@@ -598,8 +566,10 @@ class RoboregServer(Node):
         )
 
     def _create_subscriptions(self) -> None:
-        self._create_camera_info_subscription()
-        self._create_image_subscription()
+        self._create_left_camera_info_subscription()
+        self._create_left_image_subscription()
+        self._create_right_camera_info_subscription()
+        self._create_right_image_subscription()
         self._create_joint_state_subscription()
         self._create_depth_subscription()
 
@@ -611,13 +581,17 @@ class RoboregServer(Node):
 
     def _on_sync(
         self,
-        image: Image,
-        camera_info: CameraInfo,
+        left_image: Image,
+        left_camera_info: CameraInfo,
+        right_image: Image,
+        right_camera_info: CameraInfo,
         joint_state: JointState,
         depth: Image,
     ):
-        self._synced_sample.image = image
-        self._synced_sample.camera_info = camera_info
+        self._synced_sample.left_image = left_image
+        self._synced_sample.left_camera_info = left_camera_info
+        self._synced_sample.right_image = right_image
+        self._synced_sample.right_camera_info = right_camera_info
         self._synced_sample.joint_state = joint_state
         self._synced_sample.depth = depth
 

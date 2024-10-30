@@ -17,6 +17,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/CollectSample.srv"
   "srv/Export.srv"
   "srv/Import.srv"
+  "srv/RegIcp.srv"
+  "srv/RegSdr.srv"
 )
 
 ament_package()

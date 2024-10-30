@@ -6,20 +6,26 @@ from sensor_msgs.msg import CameraInfo, Image, JointState
 
 @dataclass
 class SyncedSample:
-    image: Image
-    camera_info: CameraInfo
+    left_image: Image
+    left_camera_info: CameraInfo
+    right_image: Image
+    right_camera_info: CameraInfo
     joint_state: JointState
     depth: Image
 
     def __init__(self) -> None:
-        self.image = None
-        self.camera_info = None
+        self.left_image = None
+        self.left_camera_info = None
+        self.right_image = None
+        self.right_camera_info = None
         self.joint_state = None
         self.depth = None
 
     def clear(self) -> None:
-        self.image = None
-        self.camera_info = None
+        self.left_image = None
+        self.left_camera_info = None
+        self.right_image = None
+        self.right_camera_info = None
         self.joint_state = None
         self.depth = None
 
@@ -112,8 +118,10 @@ class ServerParams:
 
     def __init__(self) -> None:
         self.filters = self._Filters()
-        self.camera_info_topic = self._TopicParam()
-        self.image_topic = self._TopicParam()
+        self.left_camera_info_topic = self._TopicParam()
+        self.right_camera_info_topic = self._TopicParam()
+        self.left_image_topic = self._TopicParam()
+        self.right_image_topic = self._TopicParam()
         self.joint_state_topic = self._TopicParam()
         self.depth_topic = self._TopicParam()
         self.robot_description_topic = self._TopicParam()

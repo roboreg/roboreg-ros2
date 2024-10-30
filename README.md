@@ -18,7 +18,7 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
 > When using differentiable rendering, CUDA Toolkit is required at runtime, refer [CUDA Toolkit Install Instructions](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/).
 
 ```shell
-pip3 install git+https://github.com/lbr-stack/roboreg.git@0.4.1
+pip3 install git+https://github.com/lbr-stack/roboreg.git@0.4.2
 ```
 
 - Build this `roboreg` ROS 2 integration
@@ -36,8 +36,10 @@ ros2 launch ros2_roboreg server.launch.py -s
 ```
 
 #### Subscriped Topics
-* `image_rect_color`
-* `camera_info` 
+* `left/camera_info`
+* `left/image_rect_color`
+* `right/camera_info`
+* `right/image_rect_color`
 * `joint_states`
 * `depth/registered`
 * `robot_description`
