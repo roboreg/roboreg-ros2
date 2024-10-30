@@ -36,11 +36,15 @@ class ServerParams:
         sync_accuracy: float
         min_joint_position_change: float
         max_joint_velocity: float
+        min_depth: float
+        max_depth: float
 
         def __init__(self) -> None:
             self.sync_accuracy = 0.01
             self.min_joint_position_change = 0.001
             self.max_joint_velocity = 0.01
+            self.min_depth = 0.01
+            self.max_depth = 4.0
 
     @dataclass
     class _TopicParam:

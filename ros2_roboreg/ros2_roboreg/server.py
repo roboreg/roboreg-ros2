@@ -1,7 +1,7 @@
 import copy
 import os
 import pathlib
-from typing import List, Tuple
+from typing import List
 
 import cv2
 import cv_bridge
@@ -32,7 +32,7 @@ from std_srvs.srv import Trigger
 
 from ros2_roboreg.broadcaster import StaticTFBroadcaster
 from ros2_roboreg.structs import ServerParams, SyncedSample
-from ros2_roboreg_idl.srv import CollectSample, Export, Import
+from ros2_roboreg_idl.srv import CollectSample, Export, Import, RegHydraICP, RegStereoDR
 
 
 class RoboregServer(Node):
@@ -42,6 +42,15 @@ class RoboregServer(Node):
         # data collection
         self._synced_sample = SyncedSample()
         self._synced_samples: List[SyncedSample] = []
+
+        # segmentation
+        self._left_detector = None
+        self._right_detector = None
+        self._left_segmentations = []
+        self._right_segmentations = []
+
+        # point cloud
+        self._pcls = []
 
         # opencv bridge
         self._bridge = cv_bridge.CvBridge()
@@ -59,6 +68,11 @@ class RoboregServer(Node):
         # parameter callback
         self.add_on_set_parameters_callback(self._on_set_parameter)
 
+        # robot model
+        self._urdf_parser = None
+        self._kinematics = None
+        self._meshes = None
+
         # subscriptions
         self._left_camera_info_sub = None
         self._left_image_sub = None
@@ -72,6 +86,169 @@ class RoboregServer(Node):
         # services
         self._create_services()
 
+    def _instantiate_robot_model(self, batch_size: int) -> None:
+        if not self._urdf_parser:
+            raise ValueError("No robot description available")
+
+        if (  # already instantiated and correctly setup
+            self._kinematics is not None
+            and self._meshes is not None
+            and batch_size == self._meshes.batch_size
+            and self._kinematics.device == self._params.robot_model.device
+            and self._meshes.device == self._params.robot_model.device
+        ):
+            return
+
+        if self._params.robot_model.root_link_name == "":
+            self._params.robot_model.root_link_name = (
+                self._urdf_parser.link_names_with_meshes[0]
+            )
+            self.get_logger().info(
+                f"Root link name not provided. Using the first link with mesh: '{self._params.robot_model.root_link_name}'."
+            )
+        if self._params.robot_model.end_link_name == "":
+            self._params.robot_model.end_link_name = (
+                self._urdf_parser.link_names_with_meshes[-1]
+            )
+            self.get_logger().info(
+                f"End link name not provided. Using the last link with mesh: '{self._params.robot_model.end_link_name}'."
+            )
+
+        # instantiate kinematics
+        self._kinematics = rrd.TorchKinematics(
+            urdf_parser=self._urdf_parser,
+            root_link_name=self._params.robot_model.root_link_name,
+            end_link_name=self._params.robot_model.end_link_name,
+            device=self._params.robot_model.device,
+        )
+
+        # instantiate meshes
+        self._meshes = rrd.TorchMeshContainer(
+            self._urdf_parser.ros_package_mesh_paths(
+                root_link_name=self._params.robot_model.root_link_name,
+                end_link_name=self._params.robot_model.end_link_name,
+            ),
+            batch_size=batch_size,
+            device=self._params.robot_model.device,
+        )
+
+    def _detect_and_segment(self):
+        left_segment_idx = len(self._left_segmentations)
+        right_segment_idx = len(self._right_segmentations)
+        if left_segment_idx >= len(self._synced_samples) and right_segment_idx >= len(
+            self._synced_samples
+        ):
+            self.get_logger().info("Segmentation already done")
+            return
+
+        # segment the images
+        self._left_detector = OpenCVDetector(
+            n_positive_samples=self._params.segmentation.n_positive_samples,
+            n_negative_samples=self._params.segmentation.n_negative_samples,
+            window_name="Left Image Detector",
+        )
+        self._right_detector = OpenCVDetector(
+            n_positive_samples=self._params.segmentation.n_positive_samples,
+            n_negative_samples=self._params.segmentation.n_negative_samples,
+            window_name="Right Image Detector",
+        )
+        self.get_logger().info(
+            f"Loading SAM 2 model with ID: '{self._params.segmentation.model_id}'"
+        )
+
+        segmentor = Sam2Segmentor(
+            model_id=self._params.segmentation.model_id,
+            pth=self._params.segmentation.pth,
+            device=self._params.segmentation.device,
+        )
+        self.get_logger().info("Segmentation model loaded")
+        self.get_logger().info("Segmenting robot...")
+        while left_segment_idx < len(self._synced_samples):
+            # segment left images
+            synced_sample = self._synced_samples[left_segment_idx]
+            left_image = self._bridge.imgmsg_to_cv2(
+                synced_sample.left_image, desired_encoding="bgr8"
+            )
+            samples, labels = self._left_detector.detect(left_image)
+            probability = segmentor(left_image, np.array(samples), np.array(labels))
+            mask = np.where(probability > segmentor.pth, 255, 0).astype(np.uint8)
+            self._left_segmentations.append((mask * 255.0).astype(np.uint8))
+            left_segment_idx += 1
+            self.get_logger().info(
+                f"Annotated [{left_segment_idx}/{len(self._synced_samples)}] left images"
+            )
+        while right_segment_idx < len(self._synced_samples):
+            # segment right images
+            synced_sample = self._synced_samples[right_segment_idx]
+            right_image = self._bridge.imgmsg_to_cv2(
+                synced_sample.right_image, desired_encoding="bgr8"
+            )
+            samples, labels = self._right_detector.detect(right_image)
+            probability = segmentor(right_image, np.array(samples), np.array(labels))
+            mask = np.where(probability > segmentor.pth, 255, 0).astype(np.uint8)
+            self._right_segmentations.append((mask * 255.0).astype(np.uint8))
+            right_segment_idx += 1
+            self.get_logger().info(
+                f"Annotated [{right_segment_idx}/{len(self._synced_samples)}] right images"
+            )
+        self.get_logger().info("Segmentation done")
+
+        # delete model from gpu
+        del segmentor
+        torch.cuda.empty_cache()
+
+    def _obtain_pcl_from_depth(self) -> None:
+        if len(self._pcls) == len(self._synced_samples):
+            self.get_logger().info("Point clouds already computed")
+            return
+        if len(self._synced_samples) == 0:
+            self.get_logger().warn("No data available")
+            return
+        depths = [
+            self._bridge.imgmsg_to_cv2(synced_sample.depth)
+            for synced_sample in self._synced_samples
+        ]
+        depths = torch.tensor(
+            np.array(depths),
+            dtype=torch.float32,
+            device=self._params.robot_model.device,
+        )
+        intrinsics = [
+            np.array(synced_sample.left_camera_info.k).reshape(3, 3)
+            for synced_sample in self._synced_samples
+        ]
+        intrinsics = torch.tensor(
+            np.array(intrinsics),
+            dtype=torch.float32,
+            device=self._params.robot_model.device,
+        )
+        pcls = depth_to_xyz(
+            depths,
+            intrinsics,
+            z_min=self._params.filters.min_depth,
+            z_max=self._params.filters.max_depth,
+        )
+
+        # transform into desired frame
+        height, width = (
+            self._synced_samples[0].left_camera_info.height,
+            self._synced_samples[0].left_camera_info.width,
+        )
+        # flatten BxHxWx3 -> Bx(H*W)x3
+        pcls = pcls.view(-1, height * width, 3)
+        pcls = to_homogeneous(pcls)
+        ht_optical = generate_ht_optical(
+            pcls.shape[0], dtype=torch.float32, device=self._params.robot_model.device
+        )
+        pcls = torch.matmul(pcls, ht_optical.transpose(-1, -2))
+        pcls = from_homogeneous(pcls)
+
+        # unflatten
+        pcls = pcls.view(-1, height, width, 3)
+
+        # turn pcls into list of numpy arrays
+        self._pcls = [pcl.cpu().numpy() for pcl in pcls]
+
     def _declare_parameters(self) -> None:
         self.declare_parameters(
             namespace="",
@@ -79,6 +256,8 @@ class RoboregServer(Node):
                 ("filters.sync_accuracy", 0.01),
                 ("filters.min_joint_position_change", 0.001),
                 ("filters.max_joint_velocity", 0.01),
+                ("filters.min_depth", 0.01),
+                ("filters.max_depth", 4.0),
             ],
         )
         self.declare_parameters(
@@ -145,10 +324,18 @@ class RoboregServer(Node):
             .get_parameter_value()
             .double_value
         )
+        self._params.filters.min_depth = (
+            self.get_parameter("filters.min_depth").get_parameter_value().double_value
+        )
+        self._params.filters.max_depth = (
+            self.get_parameter("filters.max_depth").get_parameter_value().double_value
+        )
 
         # topic parameters
         self._params.left_image_topic.name = (
-            self.get_parameter("topics.image.left.name").get_parameter_value().string_value
+            self.get_parameter("topics.image.left.name")
+            .get_parameter_value()
+            .string_value
         )
         self._params.left_image_topic.qos_reliability = (
             self.get_parameter("topics.image.left.qos_reliability")
@@ -166,7 +353,9 @@ class RoboregServer(Node):
             .string_value
         )
         self._params.right_image_topic.name = (
-            self.get_parameter("topics.image.right.name").get_parameter_value().string_value
+            self.get_parameter("topics.image.right.name")
+            .get_parameter_value()
+            .string_value
         )
         self._params.right_image_topic.qos_reliability = (
             self.get_parameter("topics.image.right.qos_reliability")
@@ -280,6 +469,8 @@ class RoboregServer(Node):
         self.get_logger().info(
             f"*{' '*7}Min joint position change: {self._params.filters.min_joint_position_change} rad"
         )
+        self.get_logger().info(f"*{' '*7}Min depth: {self._params.filters.min_depth} m")
+        self.get_logger().info(f"*{' '*7}Max depth: {self._params.filters.max_depth} m")
         self.get_logger().info(f"*{' '*5}Topics:")
         self.get_logger().info(f"*{' '*7}Left image:")
         self.get_logger().info(f"*{' '*9}Name: {self._params.left_image_topic.name}")
@@ -287,7 +478,9 @@ class RoboregServer(Node):
             f"*{' '*9}QoS reliability: {self._params.left_image_topic.qos_reliability}."
         )
         self.get_logger().info(f"*{' '*7}Left camera info:")
-        self.get_logger().info(f"*{' '*9}Name: {self._params.left_camera_info_topic.name}")
+        self.get_logger().info(
+            f"*{' '*9}Name: {self._params.left_camera_info_topic.name}"
+        )
         self.get_logger().info(
             f"*{' '*9}QoS reliability: {self._params.left_camera_info_topic.qos_reliability}"
         )
@@ -297,7 +490,9 @@ class RoboregServer(Node):
             f"*{' '*9}QoS reliability: {self._params.right_image_topic.qos_reliability}."
         )
         self.get_logger().info(f"*{' '*7}Right camera info:")
-        self.get_logger().info(f"*{' '*9}Name: {self._params.right_camera_info_topic.name}")
+        self.get_logger().info(
+            f"*{' '*9}Name: {self._params.right_camera_info_topic.name}"
+        )
         self.get_logger().info(
             f"*{' '*9}QoS reliability: {self._params.right_camera_info_topic.qos_reliability}"
         )
@@ -376,7 +571,9 @@ class RoboregServer(Node):
                 self._create_left_image_subscription()
                 self._create_approximate_time_sync()
             elif parameter.name == "topics.image.right.name":
-                self.get_logger().info(f"Setting right image topic to {parameter.value}")
+                self.get_logger().info(
+                    f"Setting right image topic to {parameter.value}"
+                )
                 self._params.right_image_topic.name = parameter.value
                 self._create_right_image_subscription()
                 self._create_approximate_time_sync()
@@ -416,10 +613,10 @@ class RoboregServer(Node):
             Trigger, "~/clear_samples", self._on_clear_samples
         )
         self._hydra_icp_register_service = self.create_service(
-            Trigger, "~/register/hydra_icp", self._on_hydra_icp_register
+            RegHydraICP, "~/register/hydra_icp", self._on_register_hydra_icp
         )
         self._stereo_dr_register_service = self.create_service(
-            Trigger, "~/register/stereo_dr", self._on_stereo_dr_register
+            RegStereoDR, "~/register/stereo_dr", self._on_register_stereo_dr
         )
         self._export_samples_service = self.create_service(
             Export,
@@ -555,7 +752,6 @@ class RoboregServer(Node):
 
     def _create_robot_description_subscription(self) -> None:
         qos_profile = qos_profile_system_default
-        self._robot_description = None
         qos_profile.reliability = ReliabilityPolicy.RELIABLE
         qos_profile.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self._robot_description_sub = self.create_subscription(
@@ -597,51 +793,19 @@ class RoboregServer(Node):
 
     def _on_robot_description(self, msg: String) -> None:
         self.get_logger().info("Received robot description.")
-        self._robot_description = msg.data
-
         # instantiate urdf parser
         self._urdf_parser = URDFParser()
-        self._urdf_parser.from_urdf(self._robot_description)
-        if self._params.robot_model.root_link_name == "":
-            self._params.robot_model.root_link_name = (
-                self._urdf_parser.link_names_with_meshes[0]
-            )
-            self.get_logger().info(
-                f"Root link name not provided. Using the first link with mesh: '{self._params.robot_model.root_link_name}'."
-            )
-        if self._params.robot_model.end_link_name == "":
-            self._params.robot_model.end_link_name = (
-                self._urdf_parser.link_names_with_meshes[-1]
-            )
-            self.get_logger().info(
-                f"End link name not provided. Using the last link with mesh: '{self._params.robot_model.end_link_name}'."
-            )
-
-        # instantiate kinematics
-        self._kinematics = rrd.TorchKinematics(
-            urdf_parser=self._urdf_parser,
-            root_link_name=self._params.robot_model.root_link_name,
-            end_link_name=self._params.robot_model.end_link_name,
-            device=self._params.robot_model.device,
-        )
-
-        # instantiate meshes
-        self._meshes = rrd.TorchMeshContainer(
-            self._urdf_parser.ros_package_mesh_paths(
-                root_link_name=self._params.robot_model.root_link_name,
-                end_link_name=self._params.robot_model.end_link_name,
-            ),
-            batch_size=1,  # this might require dynamic re-configuration depending on the registration and number of samples
-            device=self._params.robot_model.device,
-        )
+        self._urdf_parser.from_urdf(msg.data)
 
     def _on_collect_sample(
         self, request: CollectSample.Request, response: CollectSample.Response
     ) -> CollectSample.Response:
         try:
             if (
-                self._synced_sample.image is None
-                or self._synced_sample.camera_info is None
+                self._synced_sample.left_image is None
+                or self._synced_sample.right_image is None
+                or self._synced_sample.left_camera_info is None
+                or self._synced_sample.right_camera_info is None
                 or self._synced_sample.joint_state is None
                 or self._synced_sample.depth is None
             ):
@@ -694,130 +858,139 @@ class RoboregServer(Node):
         self, request: Trigger.Request, response: Trigger.Response
     ) -> Trigger.Response:
         self._synced_samples.clear()
+        self._left_detector.clear()
+        self._right_detector.clear()
+        self._left_segmentations.clear()
+        self._right_segmentations.clear()
+        self._pcls.clear()
         response.success = True
         response.message = "Cleared all samples"
         self.get_logger().info(response.message)
         return response
 
-    def _on_hydra_icp_register(
-        self, request: Trigger.Request, response: Trigger.Response
+    def _hydra_icp_impl(self, request: RegHydraICP.Request) -> torch.Tensor:
+        # process data
+        mesh_vertices = self._meshes.vertices.clone()
+        name_idx_map = np.argsort(np.array(self._synced_samples[0].joint_state.name))
+        joint_states = [
+            synced_sample.joint_state.position[name_idx_map]
+            for synced_sample in self._synced_samples
+        ]
+        joint_states = torch.tensor(
+            np.array(joint_states),
+            dtype=torch.float32,
+            device=self._params.robot_model.device,
+        )
+        ht_lookup = self._kinematics.mesh_forward_kinematics(joint_states)
+        for link_name, ht in ht_lookup.items():
+            mesh_vertices[
+                :,
+                self._meshes.lower_vertex_index_lookup[
+                    link_name
+                ] : self._meshes.upper_vertex_index_lookup[link_name],
+            ] = torch.matmul(
+                mesh_vertices[
+                    :,
+                    self._meshes.lower_vertex_index_lookup[
+                        link_name
+                    ] : self._meshes.upper_vertex_index_lookup[link_name],
+                ],
+                ht.transpose(-1, -2),
+            )
+
+        # mesh vertices to list
+        if self._meshes.batch_size != len(self._synced_samples):
+            raise ValueError("Batch size mismatch.")
+        batch_size = self._meshes.batch_size
+        mesh_vertices = from_homogeneous(mesh_vertices)
+        mesh_vertices = [mesh_vertices[i].contiguous() for i in range(batch_size)]
+        mesh_normals = []
+        for i in range(batch_size):
+            mesh_normals.append(
+                compute_vertex_normals(
+                    vertices=mesh_vertices[i], faces=self._meshes.faces
+                )
+            )
+
+        # clean observed vertices and turn into tensor
+        observed_vertices = [
+            torch.tensor(
+                clean_xyz(
+                    xyz=xyz,
+                    mask=(
+                        mask_boundary(
+                            mask,
+                            erosion_kernel=np.ones(
+                                [
+                                    request.erosion_kernel_size,
+                                    request.erosion_kernel_size,
+                                ]
+                            ),
+                        )
+                        if request.with_erosion
+                        else mask
+                    ),
+                ),
+                dtype=torch.float32,
+                device=self._params.robot_model.device,
+            )
+            for xyz, mask in zip(self._pcls, self._left_segmentations)
+        ]
+
+        # sample N points per mesh
+        for i in range(batch_size):
+            idx = torch.randperm(mesh_vertices[i].shape[0])[: request.number_of_points]
+            mesh_vertices[i] = mesh_vertices[i][idx]
+            mesh_normals[i] = mesh_normals[i][idx]
+
+        HT_init = hydra_centroid_alignment(observed_vertices, mesh_vertices)
+        HT = hydra_robust_icp(
+            HT_init,
+            observed_vertices,
+            mesh_vertices,
+            mesh_normals,
+            max_distance=request.max_distance,
+            outer_max_iter=request.outer_max_iter,
+            inner_max_iter=request.inner_max_iter,
+        )
+        return HT
+
+    def _stereo_dr_impl(self, request: RegStereoDR.Request) -> None:
+        raise NotImplementedError("Stereo DR registration not implemented yet")
+
+    def _on_register_hydra_icp(
+        self, request: RegHydraICP.Request, response: RegHydraICP.Response
     ) -> Trigger.Response:
         if len(self._synced_samples) == 0:
             response.success = False
             response.message = "No data collected yet"
             return response
-        if not self._robot_description:
+        self._instantiate_robot_model(batch_size=len(self._synced_samples))
+        if not self._kinematics:
             response.success = False
-            response.message = "No robot description available"
+            response.message = "No kinematics available"
             return response
-
+        if not self._meshes:
+            response.success = False
+            response.message = "No meshes available"
+            return response
         try:
-
-            def detect_and_segment():
-                masks = []
-
-                # segment the images
-                detector = OpenCVDetector(
-                    buffer_size=self._params.segmentation.buffer_size
+            # generate segmentation masks
+            self._detect_and_segment()
+            if len(self._left_segmentations) != len(self._synced_samples):
+                raise ValueError(
+                    "Segmentation masks not generated for all left images."
                 )
-                self.get_logger().info(
-                    f"Loading SAM model from {self._params.segmentation.sam_checkpoint_path}"
+            if len(self._right_segmentations) != len(self._synced_samples):
+                raise ValueError(
+                    "Segmentation masks not generated for all right images."
                 )
-                segmentation = SamSegmentor(
-                    sam_checkpoint=self._params.segmentation.sam_checkpoint_path,
-                    model_type=self._params.segmentation.model_type,
-                    device=self._params.segmentation.device,
-                )
-                self.get_logger().info("Segmentation model loaded")
-                self.get_logger().info("Segmenting robot...")
-                for idx, synced_data in enumerate(self._synced_samples):
-                    image = self._bridge.imgmsg_to_cv2(
-                        synced_data.image, desired_encoding="bgr8"
-                    )
-                    points, labels = detector.detect(image)
-                    detector.clear()
-                    self.get_logger().info(
-                        f"Annotated [{idx+1}/{len(self._synced_samples)}] images"
-                    )
-                    mask = segmentation(image, np.array(points), np.array(labels))
-                    masks.append((mask * 255.0).astype(np.uint8))
-                self.get_logger().info("Segmentation done")
-
-                # delete model from gpu
-                del segmentation
-                torch.cuda.empty_cache()
-                return masks
-
-            # remove segmentation from gpu
-            masks = detect_and_segment()
-
-            # prepare point clouds
-            masks = [
-                mask_boundary(
-                    mask,
-                    np.ones(
-                        [
-                            self._params.registration.erosion_kernel_size,
-                            self._params.registration.erosion_kernel_size,
-                        ]
-                    ),
-                )
-                for mask in masks
-            ]
-            self.get_logger().info("Preparing point clouds and meshes...")
-            observed_xyzs = []
-            mesh_xyzs = []
-            mesh_xyzs_normals = []
-            for synced_data, mask in zip(self._synced_samples, masks):
-                # extract xyz from point cloud and clean data
-                observed_xyz, _ = self._point_cloud_to_numpy(synced_data.point_cloud)
-                observed_xyzs.append(clean_xyz(observed_xyz, mask))
-
-                # transform mesh according to joint state
-                mesh_xyz = None
-                mesh_xyz_normals = None
-
-                self._o3d_robot.set_joint_positions(
-                    np.array(synced_data.joint_state.position)
-                )
-                pcds = self._o3d_robot.sample_point_clouds_equally(
-                    number_of_points=self._params.registration.number_of_points
-                )
-                mesh_xyz = np.concatenate([np.array(pcd.points) for pcd in pcds])
-                mesh_xyz_normals = np.concatenate(
-                    [np.array(pcd.normals) for pcd in pcds]
-                )
-                mesh_xyzs.append(mesh_xyz)
-                mesh_xyzs_normals.append(mesh_xyz_normals)
-
-            # delete masks from gpu
-            del masks
-            torch.cuda.empty_cache()
-
-            # to torch
-            for i in range(len(observed_xyzs)):
-                observed_xyzs[i] = torch.from_numpy(observed_xyzs[i]).to(
-                    dtype=torch.float32, device=self._params.registration.device
-                )
-                mesh_xyzs[i] = torch.from_numpy(mesh_xyzs[i]).to(
-                    dtype=torch.float32, device=self._params.registration.device
-                )
-                mesh_xyzs_normals[i] = torch.from_numpy(mesh_xyzs_normals[i]).to(
-                    dtype=torch.float32, device=self._params.registration.device
-                )
-
-            # registration
-            HT_init = hydra_centroid_alignment(observed_xyzs, mesh_xyzs)
-            HT = hydra_robust_icp(
-                HT_init,
-                observed_xyzs,
-                mesh_xyzs,
-                mesh_xyzs_normals,
-                max_distance=self._params.registration.max_distance,
-                outer_max_iter=self._params.registration.outer_max_iter,
-                inner_max_iter=self._params.registration.inner_max_iter,
-            )
-            self._HT = HT.cpu().numpy()
+            self._obtain_pcl_from_depth()
+            if len(self._pcls) != len(self._synced_samples):
+                raise ValueError("Point clouds not generated for all depth images.")
+            if len(self._pcls) != len(self._left_segmentations):
+                raise ValueError("Point clouds and segmentations do not match.")
+            self._hydra_icp_impl(request)
             response.success = True
             response.message = "Registration successful"
             self.get_logger().info(response.message)
@@ -825,12 +998,40 @@ class RoboregServer(Node):
             response.success = False
             response.message = f"Failed service call with: {e}"
             self.get_logger().error(response.message)
-
         return response
 
-    def _on_stereo_dr_register(
-        self, request: Trigger.Request, response: Trigger.Response
+    def _on_register_stereo_dr(
+        self, request: RegStereoDR.Request, response: RegStereoDR.Response
     ) -> Trigger.Response:
+        if len(self._synced_samples) == 0:
+            response.success = False
+            response.message = "No data collected yet"
+            return response
+        self._instantiate_robot_model(batch_size=len(self._synced_samples))
+        if not self._kinematics:
+            response.success = False
+            response.message = "No kinematics available"
+            return response
+        if not self._meshes:
+            response.success = False
+            response.message = "No meshes available"
+            return response
+        try:
+            # generate segmentation masks
+            self._detect_and_segment()
+            if len(self._left_segmentations) != len(self._synced_samples):
+                raise ValueError(
+                    "Segmentation masks not generated for all left images."
+                )
+            if len(self._right_segmentations) != len(self._synced_samples):
+                raise ValueError(
+                    "Segmentation masks not generated for all right images."
+                )
+            self._stereo_dr_impl(request)
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed service call with: {e}"
+            self.get_logger().error(response.message)
         return response
 
     def _on_export_samples(
@@ -841,6 +1042,11 @@ class RoboregServer(Node):
                 response.success = False
                 response.message = "No data collected yet"
                 return response
+
+            if len(self._pcls) != len(self._synced_samples):
+                self._obtain_pcl_from_depth()  # generate point clouds in case
+            if len(self._pcls) != len(self._left_segmentations):
+                raise ValueError("Point clouds and segmentations do not match.")
 
             path = pathlib.Path(request.path)
             self.get_logger().info(f"Saving data to {path.absolute()}")
@@ -871,10 +1077,26 @@ class RoboregServer(Node):
                     with open(path, "w") as file:
                         yaml.dump(camera_info_dict, file)
 
-                # save camera info
+                # save camera infos
                 write_camera_info_to_yaml(
-                    self._synced_samples[0].camera_info,
-                    os.path.join(path, "camera_info.yaml"),
+                    self._synced_samples[0].left_camera_info,
+                    os.path.join(path, "left_camera_info.yaml"),
+                )
+                write_camera_info_to_yaml(
+                    self._synced_samples[0].right_camera_info,
+                    os.path.join(path, "right_camera_info.yaml"),
+                )
+
+                # save segmentation labels
+                self._left_detector.write(
+                    path=os.path.join(path, "sam2_left_labels.csv"),
+                    samples=self._left_detector.samples,
+                    labels=self._left_detector.labels,
+                )
+                self._right_detector.write(
+                    path=os.path.join(path, "sam2_right_labels.csv"),
+                    samples=self._right_detector.samples,
+                    labels=self._right_detector.labels,
                 )
 
                 # log time stamps to csv
@@ -888,33 +1110,41 @@ class RoboregServer(Node):
                         )
 
                         # convert to numpy
-                        image_np = self._bridge.imgmsg_to_cv2(
-                            synced_data.image, desired_encoding="passthrough"
+                        left_image_np = self._bridge.imgmsg_to_cv2(
+                            synced_data.left_image, desired_encoding="passthrough"
                         )
-                        joint_position = synced_data.joint_state.position
-                        name = synced_data.joint_state.name
-                        joint_position = [
-                            x for _, x in sorted(zip(name, joint_position))
-                        ]
+                        right_image_np = self._bridge.imgmsg_to_cv2(
+                            synced_data.right_image, desired_encoding="passthrough"
+                        )
+                        name_idx_map = np.argsort(
+                            np.array(synced_data.joint_state.name)
+                        )
+                        joint_position = synced_data.joint_state.position[name_idx_map]
                         joint_position_np = np.array(joint_position)
-
-                        # TODO: handle depth image and converted point cloud export...
-                        xyz_np, rgba_np = self._point_cloud_to_numpy(
-                            synced_data.point_cloud
+                        depth_np = self._bridge.imgmsg_to_cv2(
+                            synced_data.depth, desired_encoding="passthrough"
                         )
 
                         # save
                         cv2.imwrite(
-                            os.path.join(path, f"image_{idx}.png"),
-                            image_np,
+                            os.path.join(path, f"left_image_{idx}.png"),
+                            left_image_np,
+                        )
+                        cv2.imwrite(
+                            os.path.join(path, f"right_image_{idx}.png"),
+                            right_image_np,
                         )
                         np.save(
                             os.path.join(path, f"joint_states_{idx}.npy"),
                             joint_position_np,
                         )
                         np.save(
+                            os.path.join(path, f"depth_{idx}.npy"),
+                            depth_np,
+                        )
+                        np.save(
                             os.path.join(path, f"xyz_{idx}.npy"),
-                            xyz_np,
+                            self._pcls[idx],
                         )
                 self._synced_samples.clear()
 

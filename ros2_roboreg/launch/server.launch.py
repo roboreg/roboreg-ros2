@@ -9,16 +9,16 @@ def generate_launch_description() -> LaunchDescription:
     ld = LaunchDescription()
     ld.add_action(
         DeclareLaunchArgument(
-            "config_pkg",
+            "cfg_pkg",
             default_value="ros2_roboreg",
             description="Package name containing the configuration file.",
         )
     )
     ld.add_action(
         DeclareLaunchArgument(
-            "config_path",
+            "cfg_path",
             default_value="config/roboreg.yaml",
-            description="Configuration file path.",
+            description="Configuration file path relative to cfg_pkg.",
         )
     )
     ld.add_action(
@@ -30,8 +30,8 @@ def generate_launch_description() -> LaunchDescription:
             parameters=[
                 PathJoinSubstitution(
                     [
-                        FindPackageShare(LaunchConfiguration("config_pkg")),
-                        LaunchConfiguration("config_path"),
+                        FindPackageShare(LaunchConfiguration("cfg_pkg")),
+                        LaunchConfiguration("cfg_path"),
                     ]
                 )
             ],

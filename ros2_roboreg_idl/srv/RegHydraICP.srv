@@ -1,3 +1,4 @@
+bool with_erosion true
 int16 erosion_kernel_size 10
 int16 number_of_points 5000
 float32 max_distance 0.1
