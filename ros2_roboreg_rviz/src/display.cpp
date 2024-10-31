@@ -14,7 +14,7 @@ Display::Display() : roboreg_node_name_("roboreg") {
       this);
   depth_topic_property_ = new rviz_common::properties::RosTopicProperty(
       "Depth Topic", "depth/registered", rosidl_generator_traits::name<sensor_msgs::msg::Image>(),
-      "Topic under which the depth is published.", this, SLOT(updatePointCloudTopic()), this);
+      "Topic under which the depth is published.", this, SLOT(updateDepthTopic()), this);
   roboreg_node_name_property_ = new rviz_common::properties::StringProperty(
       "Roboreg Node Name", roboreg_node_name_.c_str(),
       "The node name under which the roboreg server lives.", this, SLOT(updateRoboregNodeNode()),
@@ -64,7 +64,7 @@ void Display::updateJointStateTopic() {
   parameters_client_->set_parameters({rclcpp::Parameter("topics.joint_state.name", topic)});
 }
 
-void Display::updatePointCloudTopic() {
+void Display::updateDepthTopic() {
   auto topic = depth_topic_property_->getStdString();
   RCLCPP_INFO(node_ptr_->get_logger(), "Updating depth topic to: %s", topic.c_str());
   parameters_client_->set_parameters({rclcpp::Parameter("topics.depth.name", topic)});

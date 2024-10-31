@@ -9,6 +9,14 @@ def generate_launch_description() -> LaunchDescription:
     ld = LaunchDescription()
     ld.add_action(
         DeclareLaunchArgument(
+            "server",
+            default_value="rr_monocular_depth",
+            choices=["rr_monocular_depth", "rr_stereo_depth"],
+            description="Server type to launch.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
             "cfg_pkg",
             default_value="ros2_roboreg",
             description="Package name containing the configuration file.",
@@ -17,14 +25,14 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(
         DeclareLaunchArgument(
             "cfg_path",
-            default_value="config/roboreg.yaml",
+            default_value="config/stereo.yaml",
             description="Configuration file path relative to cfg_pkg.",
         )
     )
     ld.add_action(
         Node(
             package="ros2_roboreg",
-            executable="roboreg",
+            executable=LaunchConfiguration("server"),
             name="roboreg",
             output="screen",
             parameters=[

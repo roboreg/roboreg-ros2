@@ -36,12 +36,11 @@ ros2 launch ros2_roboreg server.launch.py -s
 ```
 
 #### Subscriped Topics
-* `left/camera_info`
-* `left/image_rect_color`
-* `right/camera_info`
-* `right/image_rect_color`
+* `camera/camera_info` (can be multiple)
+* `camera/image_rect_color` (can be multiple)
 * `joint_states`
-* `depth/registered`
+* `camera/depth/registered`
+* `camera/depth/registered/camera_info`
 * `robot_description`
 
 #### Services

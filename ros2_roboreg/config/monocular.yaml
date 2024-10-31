@@ -1,35 +1,30 @@
 /**/roboreg:
   ros__parameters:
+    topics:
+      image:
+        name: /camera/image_rect_color
+        qos_reliability: BEST_EFFORT
+        camera_info:
+          name: /camera/camera_info
+          qos_reliability: BEST_EFFORT
+      depth:
+        name: /camera/depth/registered
+        qos_reliability: BEST_EFFORT
+        camera_info:
+          name: /camera/depth/registered/camera_info
+          qos_reliability: BEST_EFFORT
+      joint_state:
+        name: /joint_states
+        qos_reliability: BEST_EFFORT
+      robot_description:
+        name: /robot_description
+
     filters:
       sync_accuracy: 1.0
       min_joint_position_change: 0.001
       max_joint_velocity: 0.01
       min_depth: 0.01
       max_depth: 4.0
-
-    topics:
-      camera_info:
-        left:
-          name: /left/camera_info
-          qos_reliability: BEST_EFFORT # loaded through getattr. From: [SYSTEM_DEFAULT, BEST_EFFORT, RELIABLE]
-        right:
-          name: /right/camera_info
-          qos_reliability: BEST_EFFORT
-      image:
-        left:
-          name: /left/image_rect_color
-          qos_reliability: BEST_EFFORT
-        right:
-          name: /right/image_rect_color
-          qos_reliability: BEST_EFFORT
-      joint_state:
-        name: /joint_states
-        qos_reliability: BEST_EFFORT
-      depth:
-        name: /depth/registered
-        qos_reliability: BEST_EFFORT
-      robot_description:
-        name: /robot_description
 
     segmentation:
       device: cuda

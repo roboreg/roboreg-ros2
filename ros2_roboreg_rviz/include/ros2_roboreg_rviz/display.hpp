@@ -35,7 +35,7 @@ protected:
 private Q_SLOTS:
   void updateRobotDescriptionTopic();
   void updateJointStateTopic();
-  void updatePointCloudTopic();
+  void updateDepthTopic();
   void updateRoboregNodeNode();
 
 private:
