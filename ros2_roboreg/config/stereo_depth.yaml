@@ -1,11 +1,17 @@
 /**/roboreg:
   ros__parameters:
     topics:
-      image:
-        name: /camera/image_rect_color
+      left_image:
+        name: /camera/left/image_rect_color
         qos_reliability: BEST_EFFORT
         camera_info:
-          name: /camera/camera_info
+          name: /camera/left/camera_info
+          qos_reliability: BEST_EFFORT
+      right_image:
+        name: /camera/right/image_rect_color
+        qos_reliability: BEST_EFFORT
+        camera_info:
+          name: /camera/right/camera_info
           qos_reliability: BEST_EFFORT
       depth:
         name: /camera/depth/registered
@@ -21,8 +27,6 @@
 
     filters:
       sync_accuracy: 1.0
-      min_joint_position_change: 0.001
-      max_joint_velocity: 0.01
       min_depth: 0.01
       max_depth: 4.0
 
