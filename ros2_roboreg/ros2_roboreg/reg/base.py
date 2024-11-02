@@ -134,7 +134,7 @@ class Eye2HandRegistrationBase(Node, ABC):
                     res.message = f"Path {path.parent.absolute()} does not exist"
                     self.get_logger().error(res.message)
                     return res
-            np.savetxt(path, self._ht)
+            np.save(path, self._ht)
             res.message = f"Saved transform to {path.absolute()}"
             self.get_logger().info(res.message)
         except Exception as e:
@@ -155,7 +155,7 @@ class Eye2HandRegistrationBase(Node, ABC):
                 self.get_logger().error(res.message)
                 return res
             self.get_logger().info(f"Loading transform from {req.path}")
-            ht = np.loadtxt(path.absolute())
+            ht = np.load(path.absolute())
             if ht.shape != (4, 4):
                 res.success = False
                 res.message = f"Transform has wrong shape: {ht.shape}"
