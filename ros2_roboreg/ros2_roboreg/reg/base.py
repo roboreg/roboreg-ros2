@@ -82,11 +82,15 @@ class Eye2HandRegistrationBase(Node, ABC):
         )
 
         # common registration utilities
+        self.get_logger().info(
+            "Instantiating segmentation model. This may take a while..."
+        )
         self._segmentor = Sam2Segmentor(
             model_id=self._segmentation_params.model_id,
             pth=self._segmentation_params.pth,
             device=self._segmentation_params.device,
         )
+        self.get_logger().info("Segmentation model instantiated.")
         self._segmentations = []
         self._kinematics: rrd.TorchKinematics = None
         self._meshes: rrd.TorchMeshContainer = (
