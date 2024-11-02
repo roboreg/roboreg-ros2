@@ -22,17 +22,17 @@ public:
   void setupClient(const std::string &roboreg_node_name);
 
 protected:
-  void onExportSamples_();
+  void onExportData_();
   void onExportTF_();
   void onImportTF_();
 
 protected:
   rclcpp::Node::SharedPtr node_ptr_;
-  rclcpp::Client<ros2_roboreg_idl::srv::Export>::SharedPtr export_samples_client_ptr_;
+  rclcpp::Client<ros2_roboreg_idl::srv::Export>::SharedPtr export_data_client_ptr_;
   rclcpp::Client<ros2_roboreg_idl::srv::Export>::SharedPtr export_tf_client_ptr_;
   rclcpp::Client<ros2_roboreg_idl::srv::Import>::SharedPtr import_tf_client_ptr_;
 
-  QPushButton *export_samples_button_;
+  QPushButton *export_data_button_;
   QPushButton *export_tf_button_;
   QPushButton *import_tf_button_;
 };

@@ -4,12 +4,14 @@ from typing import List
 
 import numpy as np
 import torch
+from rcl_interfaces.msg import Parameter, SetParametersResult
 from rclpy.node import Node
 from roboreg import differentiable as rrd
 from roboreg.detector import OpenCVDetector
 from roboreg.io import URDFParser
 from roboreg.segmentor import Sam2Segmentor
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 from ..broadcaster import StaticTFBroadcaster
 from ..data.server import Server
@@ -38,6 +40,12 @@ class Eye2HandRegistrationBase(Node, ABC):
         end_link_name: str
         visual_meshes: bool
 
+    @dataclass
+    class TFBroadcasterParams:
+        parent_frame: str
+        child_frame: str
+        target_child_frame: str
+
     def __init__(self, node_name: str) -> None:
         super().__init__(node_name)
 
@@ -49,13 +57,19 @@ class Eye2HandRegistrationBase(Node, ABC):
         self._declare_extra_parameters()
         self._get_extra_parameters()
 
+        # parameter callbacks
+        self.add_on_set_parameters_callback(self._on_set_parameters)
+
         # data collections
         self._data_server = Server(node=self)
-        self._register_synced_subscribers()
+        self._reload_synced_subscribers()
 
         # results broadcasting
         self._ht = np.eye(4)
         self._tf_broadcaster = StaticTFBroadcaster(node=self)
+        self._tf_broadcast_srv = self.create_service(
+            Trigger, "~/broadcast_transform", self._on_tf_broadcast
+        )
 
         # common registration utilities
         self._segmentor = Sam2Segmentor(
@@ -69,12 +83,31 @@ class Eye2HandRegistrationBase(Node, ABC):
             None  # requires configuration based on batch size (number of synced samples)
         )
         self._urdf_parser: URDFParser = URDFParser()
+        self._robot_description_sub = None
+        self._create_robot_description_sub()
+
+    def _create_robot_description_sub(self) -> None:
+        if self._robot_description_sub is not None:
+            self.destroy_subscription(self._robot_description_sub)
         self._robot_description_sub = self.create_subscription(
-            String, "robot_description", self._on_robot_description, 1
+            String, self._robot_description_topic, self._on_robot_description, 1
         )
 
-    def initialize(self) -> None:
-        self._data_server.initialize(accuracy=self._filter_params.sync_accuracy)
+    def _on_tf_broadcast(self, _, res: Trigger.Response) -> Trigger.Response:
+        try:
+            self._tf_broadcaster.broadcast_tf(
+                ht=self._ht,
+                parent=self._tf_broadcaster_params.parent_frame,
+                child=self._tf_broadcaster_params.child_frame,
+                target_child=self._tf_broadcaster_params.target_child_frame,
+            )
+            res.success = True
+            res.message = "Broadcasted transform."
+        except Exception as e:
+            res.success = False
+            res.message = str(e)
+            self.get_logger().error(res.message)
+        return res
 
     def _on_robot_description(self, msg: String) -> None:
         self._urdf_parser.from_urdf(msg.data)
@@ -127,6 +160,12 @@ class Eye2HandRegistrationBase(Node, ABC):
         self.declare_parameters(
             namespace="",
             parameters=[
+                ("topics.robot_description.name", "/robot_description"),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
                 ("filters.sync_accuracy", 1.0),
                 ("filters.min_depth", 0.01),
                 ("filters.max_depth", 4.0),
@@ -162,6 +201,11 @@ class Eye2HandRegistrationBase(Node, ABC):
         )
 
     def _get_common_parameters(self) -> None:
+        self._robot_description_topic = (
+            self.get_parameter("topics.robot_description.name")
+            .get_parameter_value()
+            .string_value
+        )
         self._filter_params = self._FilterParams(
             sync_accuracy=self.get_parameter("filters.sync_accuracy")
             .get_parameter_value()
@@ -207,6 +251,39 @@ class Eye2HandRegistrationBase(Node, ABC):
             .get_parameter_value()
             .bool_value,
         )
+        self._tf_broadcaster_params = self.TFBroadcasterParams(
+            parent_frame=self.get_parameter("tf_broadcaster.parent_frame")
+            .get_parameter_value()
+            .string_value,
+            child_frame=self.get_parameter("tf_broadcaster.child_frame")
+            .get_parameter_value()
+            .string_value,
+            target_child_frame=self.get_parameter("tf_broadcaster.target_child_frame")
+            .get_parameter_value()
+            .string_value,
+        )
+
+    def _on_set_common_parameters_impl(
+        self, paramaters: List[Parameter]
+    ) -> SetParametersResult:
+        result = SetParametersResult(successful=True)
+        for parameter in paramaters:
+            if parameter.name == "topics.robot_description.name":
+                self.get_logger().info(
+                    f"Setting robot description topic to {parameter.value}"
+                )
+                self._robot_description_topic = parameter.value
+                self._create_robot_description_sub()
+            else:
+                continue
+        return result
+
+    def _on_set_parameters(self, paramaters: List[Parameter]) -> SetParametersResult:
+        result = self._on_set_common_parameters_impl(paramaters)
+        if not result.successful:
+            return result
+        result = self._on_set_extra_parameters_impl(paramaters)
+        return result
 
     def _segment_impl(self, images: List[np.ndarray]) -> List[np.ndarray]:
         segmentations = []
@@ -223,8 +300,19 @@ class Eye2HandRegistrationBase(Node, ABC):
             )
         return segmentations
 
+    def _reload_synced_subscribers(self) -> None:
+        self._data_server.subscribers = {}
+        self._register_synced_subscribers()
+        self._data_server.initialize(accuracy=self._filter_params.sync_accuracy)
+
     @abstractmethod
     def _register_synced_subscribers(self) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _on_set_extra_parameters_impl(
+        self, paramaters: List[Parameter]
+    ) -> SetParametersResult:
         raise NotImplementedError
 
     @abstractmethod

@@ -18,7 +18,7 @@ class Server(ABC):
         self._node = node
 
         # data collection
-        self._collectables: OrderedDict[str, Collectable] = {}
+        self._collectables: OrderedDict[str, Collectable] = None
         self._collectables_history: List[OrderedDict[str, Collectable]] = []
 
         # subscribers
@@ -81,7 +81,7 @@ class Server(ABC):
             self._collectables = None
             res.success = True
             res.n_collected = len(self._collectables_history)
-            res.message = f"Collected {res.n_collected} data points."
+            res.message = f"Collected data points: {res.n_collected}"
             self._node.get_logger().info(res.message)
         except Exception as e:
             res.success = False

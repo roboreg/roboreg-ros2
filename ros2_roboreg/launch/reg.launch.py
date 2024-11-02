@@ -30,10 +30,17 @@ def generate_launch_description() -> LaunchDescription:
         )
     )
     ld.add_action(
+        DeclareLaunchArgument(
+            "use_sim_time",
+            default_value="False",
+            description="Use simulation (Gazebo) time.",
+        )
+    )
+    ld.add_action(
         Node(
             package="ros2_roboreg",
             executable=LaunchConfiguration("mode"),
-            name="eye_to_hand_calibration",
+            name="roboreg",
             output="screen",
             parameters=[
                 PathJoinSubstitution(
@@ -41,7 +48,8 @@ def generate_launch_description() -> LaunchDescription:
                         FindPackageShare(LaunchConfiguration("cfg_pkg")),
                         LaunchConfiguration("cfg_path"),
                     ]
-                )
+                ),
+                {"use_sim_time": LaunchConfiguration("use_sim_time")},
             ],
             emulate_tty=True,
         )

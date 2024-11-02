@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from typing import List
 
 from message_filters import Subscriber
+from rcl_interfaces.msg import Parameter, SetParametersResult
 from rclpy.qos import DurabilityPolicy, ReliabilityPolicy, qos_profile_system_default
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
@@ -225,3 +227,18 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
             .get_parameter_value()
             .string_value,
         )
+
+    def _on_set_extra_parameters_impl(
+        self, paramaters: List[Parameter]
+    ) -> SetParametersResult:
+        result = SetParametersResult(successful=True)
+        for parameter in paramaters:
+            if parameter.name == "topics.joint_state.name":
+                self.get_logger().info(
+                    f"Setting joint state topic to {parameter.value}"
+                )
+                self._extra_params.joint_state_topic = parameter.value
+                self._reload_synced_subscribers()
+            else:
+                continue
+        return result

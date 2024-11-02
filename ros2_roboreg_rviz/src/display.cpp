@@ -12,13 +12,9 @@ Display::Display() : roboreg_node_name_("roboreg") {
       rosidl_generator_traits::name<sensor_msgs::msg::JointState>(),
       "Topic under which the joint states are published.", this, SLOT(updateJointStateTopic()),
       this);
-  depth_topic_property_ = new rviz_common::properties::RosTopicProperty(
-      "Depth Topic", "depth/registered", rosidl_generator_traits::name<sensor_msgs::msg::Image>(),
-      "Topic under which the depth is published.", this, SLOT(updateDepthTopic()), this);
   roboreg_node_name_property_ = new rviz_common::properties::StringProperty(
       "Roboreg Node Name", roboreg_node_name_.c_str(),
-      "The node name under which the roboreg server lives.", this, SLOT(updateRoboregNodeNode()),
-      this);
+      "The node name under which the roboreg server lives.", this, SLOT(updateRoboregNode()), this);
 }
 
 void Display::onInitialize() {
@@ -36,18 +32,17 @@ void Display::onInitialize() {
   // initialize properties
   robot_description_topic_property_->initialize(node_abstraction);
   joint_state_topic_property_->initialize(node_abstraction);
-  depth_topic_property_->initialize(node_abstraction);
 
   // add a collect data and save synced data widgets
   auto widget = new QWidget();
-  collect_sample_widget_ = new CollectSampleWidget(node_ptr_, roboreg_node_name_, widget);
+  collect_data_widget_ = new CollectDataWidget(node_ptr_, roboreg_node_name_, widget);
   register_widget_ = new RegisterWidget(node_ptr_, roboreg_node_name_, widget);
   io_widget_ = new IOWidget(node_ptr_, roboreg_node_name_, widget);
   setAssociatedWidget(widget);
 
   // set layout
   auto layout = new QVBoxLayout(widget);
-  layout->addWidget(collect_sample_widget_);
+  layout->addWidget(collect_data_widget_);
   layout->addWidget(register_widget_);
   layout->addWidget(io_widget_);
 }
@@ -64,15 +59,9 @@ void Display::updateJointStateTopic() {
   parameters_client_->set_parameters({rclcpp::Parameter("topics.joint_state.name", topic)});
 }
 
-void Display::updateDepthTopic() {
-  auto topic = depth_topic_property_->getStdString();
-  RCLCPP_INFO(node_ptr_->get_logger(), "Updating depth topic to: %s", topic.c_str());
-  parameters_client_->set_parameters({rclcpp::Parameter("topics.depth.name", topic)});
-}
-
-void Display::updateRoboregNodeNode() {
+void Display::updateRoboregNode() {
   roboreg_node_name_ = roboreg_node_name_property_->getStdString();
-  collect_sample_widget_->setupClient(roboreg_node_name_);
+  collect_data_widget_->setupClient(roboreg_node_name_);
   register_widget_->setupClient(roboreg_node_name_);
   io_widget_->setupClient(roboreg_node_name_);
   parameters_client_.reset();

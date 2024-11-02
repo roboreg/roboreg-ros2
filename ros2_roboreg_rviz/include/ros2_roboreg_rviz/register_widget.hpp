@@ -9,6 +9,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
+#include "ros2_roboreg_idl/srv/reg_hydra_icp.hpp"
+
 namespace ros2_roboreg_rviz {
 class RegisterWidget : public QWidget {
 public:
@@ -23,7 +25,7 @@ protected:
 
 protected:
   rclcpp::Node::SharedPtr node_ptr_;
-  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr register_client_ptr_;
+  rclcpp::Client<ros2_roboreg_idl::srv::RegHydraICP>::SharedPtr register_client_ptr_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr broadcast_tf_client_ptr_;
 
   QPushButton *register_button_;
