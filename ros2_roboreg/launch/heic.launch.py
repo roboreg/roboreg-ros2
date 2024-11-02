@@ -9,10 +9,10 @@ def generate_launch_description() -> LaunchDescription:
     ld = LaunchDescription()
     ld.add_action(
         DeclareLaunchArgument(
-            "server",
-            default_value="rr_monocular_depth",
-            choices=["rr_monocular_depth", "rr_stereo_depth"],
-            description="Server type to launch.",
+            "mode",
+            default_value="monocular_depth_heic",
+            choices=["monocular_depth_heic", "stereo_depth_heic"],
+            description="Mode to launch.",
         )
     )
     ld.add_action(
@@ -25,15 +25,15 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(
         DeclareLaunchArgument(
             "cfg_path",
-            default_value="config/stereo.yaml",
+            default_value="config/monocular_depth.yaml",
             description="Configuration file path relative to cfg_pkg.",
         )
     )
     ld.add_action(
         Node(
             package="ros2_roboreg",
-            executable=LaunchConfiguration("server"),
-            name="roboreg",
+            executable=LaunchConfiguration("mode"),
+            name="eye_to_hand_calibration",
             output="screen",
             parameters=[
                 PathJoinSubstitution(

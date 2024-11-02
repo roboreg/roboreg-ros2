@@ -1,4 +1,4 @@
-/**/roboreg:
+/**/eye_to_hand_calibration:
   ros__parameters:
     topics:
       image:

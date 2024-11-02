@@ -6,6 +6,7 @@ from typing import List
 
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.node import Node
+from std_srvs.srv import Trigger
 
 from ros2_roboreg_idl.srv import CollectData, Export
 
@@ -29,6 +30,9 @@ class Server(ABC):
         # services
         self._collect_data_srv = self._node.create_service(
             CollectData, "~/collect_data", self._on_collect_data
+        )
+        self._clear_data_srv = self._node.create_service(
+            Trigger, "~/clear_data", self._on_clear_data
         )
         self._save_data_srv = self._node.create_service(
             Export, "~/export/data", self._on_save_data
@@ -84,6 +88,16 @@ class Server(ABC):
             res.n_collected = len(self._collectables_history)
             res.message = str(e)
             self._node.get_logger().error(res.message)
+        return res
+
+    def _on_clear_data(
+        self, _: Trigger.Request, res: Trigger.Response
+    ) -> Trigger.Response:
+        self._collectables = None
+        self._collectables_history.clear()
+        res.success = True
+        res.message = "Cleared all collected data."
+        self._node.get_logger().info(res.message)
         return res
 
     def _on_save_data(

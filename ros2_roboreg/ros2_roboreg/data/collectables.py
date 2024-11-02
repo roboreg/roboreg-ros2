@@ -8,6 +8,8 @@ import numpy as np
 import yaml
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
+from .decode import decode_depth
+
 T = TypeVar("T")
 
 
@@ -85,6 +87,11 @@ class CompressedImageCollectable(Collectable[CompressedImage]):
         self._desired_encoding = desired_encoding
 
     def to_numpy(self) -> np.ndarray:
+        _, compr_type = self._msg.format.split(";")
+        if compr_type.strip() == "compressedDepth":
+            return decode_depth(
+                self._msg
+            )  # converts to depth in meters of type float32
         return self._cv_bridge.compressed_imgmsg_to_cv2(
             self._msg, desired_encoding=self._desired_encoding
         )
@@ -92,9 +99,9 @@ class CompressedImageCollectable(Collectable[CompressedImage]):
     def to_disk(self, path: pathlib.Path, filename: str, mkdir: bool = True):
         super().to_disk(path, filename=filename, mkdir=mkdir)
         if "16UC1" in self._msg.format:
-            raise NotImplementedError("Conversion to depth image not implemented.")
+            np.save(path / (filename + ".npy"), self.to_numpy())
         elif "32FC1" in self._msg.format:
-            raise NotImplementedError("Conversion to depth image not implemented.")
+            np.save(path / (filename + ".npy"), self.to_numpy())
         elif "bgr8" in self._msg.format:
             cv2.imwrite(str(path / (filename + ".png")), self.to_numpy())
         elif "rgb8" in self._msg.format:
@@ -121,15 +128,12 @@ class JointStateCollectable(Collectable[JointState]):
 class CameraInfoCollectable(Collectable[CameraInfo]):
     def __init__(self, msg: CameraInfo):
         super().__init__(msg)
-        self._written = False
 
     def to_numpy(self) -> np.ndarray:
         return np.array(self._msg.k).reshape(3, 3)
 
     def to_disk(self, path: pathlib.Path, filename: str, mkdir: bool = True):
         super().to_disk(path, filename=filename, mkdir=mkdir)
-        if self._written:
-            return
         camera_info_dict = {
             "frame_id": self._msg.header.frame_id,
             "height": self._msg.height,
@@ -151,4 +155,3 @@ class CameraInfoCollectable(Collectable[CameraInfo]):
         }
         with open(str(path / (filename + ".yaml")), "w") as f:
             yaml.dump(camera_info_dict, f)
-            self._written = True

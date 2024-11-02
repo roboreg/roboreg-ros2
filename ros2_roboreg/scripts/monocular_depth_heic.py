@@ -1,10 +1,10 @@
 import rclpy
 
-from ros2_roboreg.registration import MonocularDepthHEIC
+from ros2_roboreg.registration import MonocularDepthE2HC
 
 
 def main():
     rclpy.init(args=None)
-    heic = MonocularDepthHEIC(node_name="eye_to_hand_calibration")
-    heic.initialize()
-    rclpy.spin(heic)
+    e2hc = MonocularDepthE2HC(node_name="eye_to_hand_calibration")
+    e2hc.initialize()
+    rclpy.spin(e2hc)

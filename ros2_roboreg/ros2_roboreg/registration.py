@@ -11,18 +11,19 @@ from roboreg import differentiable as rrd
 from roboreg.detector import OpenCVDetector
 from roboreg.io import URDFParser
 from roboreg.segmentor import Sam2Segmentor
-from sensor_msgs.msg import CameraInfo, Image, JointState
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 from std_msgs.msg import String
+
+from ros2_roboreg_idl.srv import RegHydraICP
 
 from .broadcaster import StaticTFBroadcaster
 from .data.server import Server
+from .plugins.hydra_icp import HydraICP
 
-# from .plugins.hydra_icp import ...
 
-
-class HandEyeCalibrationBase(Node, ABC):
+class Eye2HandCalibrationBase(Node, ABC):
     @dataclass
-    class FilterParams:
+    class _FilterParams:
         sync_accuracy: float
         min_depth: float
         max_depth: float
@@ -59,6 +60,7 @@ class HandEyeCalibrationBase(Node, ABC):
         self._register_synced_subscribers()
 
         # results broadcasting
+        self._ht = np.eye(4)
         self._tf_broadcaster = StaticTFBroadcaster(node=self)
 
         # common registration utilities
@@ -67,16 +69,12 @@ class HandEyeCalibrationBase(Node, ABC):
             pth=self._segmentation_params.pth,
             device=self._segmentation_params.device,
         )
-        self._detector = OpenCVDetector(
-            n_positive_samples=self._segmentation_params.n_positive_samples,
-            n_negative_samples=self._segmentation_params.n_negative_samples,
-            window_name=self._segmentation_params.window_name,
-        )
+        self._segmentations = []
         self._kinematics: rrd.TorchKinematics = None
         self._meshes: rrd.TorchMeshContainer = (
             None  # requires configuration based on batch size (number of synced samples)
         )
-        self._urdf_parser: URDFParser = None
+        self._urdf_parser: URDFParser = URDFParser()
         self._robot_description_sub = self.create_subscription(
             String, "robot_description", self._on_robot_description, 1
         )
@@ -110,6 +108,24 @@ class HandEyeCalibrationBase(Node, ABC):
             urdf_parser=self._urdf_parser,
             root_link_name=self._robot_model_params.root_link_name,
             end_link_name=self._robot_model_params.end_link_name,
+            device=self._robot_model_params.device,
+        )
+
+    def _instantiate_meshes(self, batch_size: int) -> None:
+        if self._kinematics is None:
+            raise ValueError("Kinematics not instantiated.")
+        if self._urdf_parser is None:
+            raise ValueError("URDF parser not instantiated.")
+        if self._meshes is not None:
+            if self._meshes.batch_size == batch_size:
+                return
+        self._meshes = rrd.TorchMeshContainer(
+            mesh_paths=self._urdf_parser.ros_package_mesh_paths(
+                root_link_name=self._robot_model_params.root_link_name,
+                end_link_name=self._robot_model_params.end_link_name,
+                visual=self._robot_model_params.visual_meshes,
+            ),
+            batch_size=batch_size,
             device=self._robot_model_params.device,
         )
 
@@ -152,7 +168,7 @@ class HandEyeCalibrationBase(Node, ABC):
         )
 
     def _get_common_parameters(self) -> None:
-        self._filter_params = self.FilterParams(
+        self._filter_params = self._FilterParams(
             sync_accuracy=self.get_parameter("filters.sync_accuracy")
             .get_parameter_value()
             .double_value,
@@ -199,7 +215,19 @@ class HandEyeCalibrationBase(Node, ABC):
         )
 
     def _segment_impl(self, images: List[np.ndarray]) -> List[np.ndarray]:
-        pass
+        segmentations = []
+        for image in images:
+            detector = OpenCVDetector(
+                n_positive_samples=self._segmentation_params.n_positive_samples,
+                n_negative_samples=self._segmentation_params.n_negative_samples,
+                window_name=self._segmentation_params.window_name,
+            )
+            samples, labels = detector.detect(image)
+            probability = self._segmentor(image, np.array(samples), np.array(labels))
+            segmentations.append(
+                np.where(probability > self._segmentor.pth, 255, 0).astype(np.uint8)
+            )
+        return segmentations
 
     @abstractmethod
     def _register_synced_subscribers(self) -> None:
@@ -218,7 +246,7 @@ class HandEyeCalibrationBase(Node, ABC):
         raise NotImplementedError
 
 
-class MonocularDepthHEIC(HandEyeCalibrationBase):
+class MonocularDepthE2HC(Eye2HandCalibrationBase, HydraICP):
     @dataclass
     class _ExtraParams:
         image_topic: str
@@ -231,6 +259,65 @@ class MonocularDepthHEIC(HandEyeCalibrationBase):
         depth_camera_info_qos_reliability: str
         joint_state_topic: str
         joint_state_qos_reliability: str
+
+    def __init__(self, node_name: str = "eye_to_hand_calibration") -> None:
+        super().__init__(node_name)
+
+        self._hydra_icp_srv = self.create_service(
+            RegHydraICP, "~/register/hydra_icp", self._on_hydra_icp
+        )
+
+    def _on_hydra_icp(
+        self, req: RegHydraICP.Request, res: RegHydraICP.Response
+    ) -> RegHydraICP.Response:
+        try:
+            batch_size = len(self._data_server._collectables_history)
+            self._instantiate_meshes(batch_size=batch_size)
+            self._segment()
+            depths = [
+                collectables["camera.depth"].to_numpy()
+                for collectables in self._data_server._collectables_history
+            ]
+            intrinsics = self._data_server._collectables_history[0][
+                "camera.depth.camera_info"
+            ].to_numpy()
+            pcls = self._depths_to_pcls(
+                depths=depths,
+                intrinsics=intrinsics,
+                z_min=self._filter_params.min_depth,
+                z_max=self._filter_params.max_depth,
+                device=self._meshes.device,
+            )
+            pcls = self._process_pcls(
+                pcls=pcls,
+                params=self._ProcessParams(
+                    with_erosion=req.with_erosion,
+                    erosion_kernel_size=req.erosion_kernel_size,
+                ),
+                masks=self._segmentations,
+                device=self._meshes.device,
+            )
+            self._ht = self._register_hydra_icp(
+                meshes=self._meshes,
+                kinematics=self._kinematics,
+                joint_states=self._data_server._collectables_history[0][
+                    "joint_states"
+                ].to_numpy(),
+                pcls=pcls,
+                params=self._RegistrationParams(
+                    number_of_points=req.number_of_points,
+                    max_distance=req.max_distance,
+                    outer_max_iter=req.outer_max_iter,
+                    inner_max_iter=req.inner_max_iter,
+                    rmse_change=req.rmse_change,
+                ),
+            )
+        except Exception as e:
+            res.success = False
+            res.message = str(e)
+            self.get_logger().error(res.message)
+            return res
+        return res
 
     def _register_synced_subscribers(self):
         qos_profile = qos_profile_system_default
@@ -249,12 +336,20 @@ class MonocularDepthHEIC(HandEyeCalibrationBase):
             ReliabilityPolicy, self._extra_params.image_qos_reliability
         )
         qos_profile.durability = DurabilityPolicy.VOLATILE
-        self._data_server.subscribers["camera.image"] = Subscriber(
-            self,
-            Image,
-            self._extra_params.image_topic,
-            qos_profile=qos_profile,
-        )
+        if "compressed" in self._extra_params.image_topic:
+            self._data_server.subscribers["camera.image"] = Subscriber(
+                self,
+                CompressedImage,
+                self._extra_params.image_topic,
+                qos_profile=qos_profile,
+            )
+        else:
+            self._data_server.subscribers["camera.image"] = Subscriber(
+                self,
+                Image,
+                self._extra_params.image_topic,
+                qos_profile=qos_profile,
+            )
         qos_profile = qos_profile_system_default
         qos_profile.reliability = getattr(
             ReliabilityPolicy, self._extra_params.camera_info_qos_reliability
@@ -271,12 +366,20 @@ class MonocularDepthHEIC(HandEyeCalibrationBase):
             ReliabilityPolicy, self._extra_params.depth_qos_reliability
         )
         qos_profile.durability = DurabilityPolicy.VOLATILE
-        self._data_server.subscribers["camera.depth"] = Subscriber(
-            self,
-            Image,
-            self._extra_params.depth_topic,
-            qos_profile=qos_profile,
-        )
+        if "compressed" in self._extra_params.depth_topic:
+            self._data_server.subscribers["camera.depth"] = Subscriber(
+                self,
+                CompressedImage,
+                self._extra_params.depth_topic,
+                qos_profile=qos_profile,
+            )
+        else:
+            self._data_server.subscribers["camera.depth"] = Subscriber(
+                self,
+                Image,
+                self._extra_params.depth_topic,
+                qos_profile=qos_profile,
+            )
         qos_profile = qos_profile_system_default
         qos_profile.reliability = getattr(
             ReliabilityPolicy, self._extra_params.depth_camera_info_qos_reliability
@@ -289,8 +392,12 @@ class MonocularDepthHEIC(HandEyeCalibrationBase):
             qos_profile=qos_profile,
         )
 
-    def _segment(self):
-        pass
+    def _segment(self) -> None:
+        images = [
+            collectables["camera.image"].to_numpy()
+            for collectables in self._data_server._collectables_history
+        ]
+        self._segmentations = self._segment_impl(images)
 
     def _declare_extra_parameters(self):
         self.declare_parameters(
@@ -356,7 +463,7 @@ class MonocularDepthHEIC(HandEyeCalibrationBase):
         )
 
 
-class StereoDepthHEIC(HandEyeCalibrationBase):
+class StereoDepthE2HC(Eye2HandCalibrationBase):
     @dataclass
     class _ExtraParams:
         left_image_topic: str
@@ -453,8 +560,8 @@ class StereoDepthHEIC(HandEyeCalibrationBase):
             qos_profile=qos_profile,
         )
 
-    def _segment(self):
-        pass
+    def _segment(self) -> None:
+        super()._segment()
 
     def _declare_extra_parameters(self):
         self.declare_parameters(
