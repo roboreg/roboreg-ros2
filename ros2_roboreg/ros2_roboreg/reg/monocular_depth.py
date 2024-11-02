@@ -36,6 +36,7 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
     def _on_hydra_icp(
         self, req: RegHydraICP.Request, res: RegHydraICP.Response
     ) -> RegHydraICP.Response:
+        res.success = True
         try:
             batch_size = len(self._data_server._collectables_history)
             self._instantiate_meshes(batch_size=batch_size)
@@ -63,12 +64,14 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
                 masks=self._segmentations,
                 device=self._meshes.device,
             )
+            joint_states = [
+                collectables["joint_states"].to_numpy()
+                for collectables in self._data_server._collectables_history
+            ]
             self._ht = self._register_hydra_icp(
                 meshes=self._meshes,
                 kinematics=self._kinematics,
-                joint_states=self._data_server._collectables_history[0][
-                    "joint_states"
-                ].to_numpy(),
+                joint_states=joint_states,
                 pcls=pcls,
                 params=self._RegistrationParams(
                     number_of_points=req.number_of_points,
@@ -78,6 +81,7 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
                     rmse_change=req.rmse_change,
                 ),
             )
+            res.message = "Registration successful"
         except Exception as e:
             res.success = False
             res.message = str(e)
