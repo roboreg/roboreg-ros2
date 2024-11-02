@@ -23,8 +23,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "monocular_depth_heic = scripts.monocular_depth_heic:main",
-            "stereo_depth_heic = scripts.stereo_depth_heic:main",
+            "monocular_depth = scripts.monocular_depth_reg:main",
+            "stereo_depth = scripts.stereo_depth_reg:main",
             "broadcaster = scripts.broadcaster_node:main",
         ],
     },

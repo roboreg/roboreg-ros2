@@ -10,8 +10,8 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(
         DeclareLaunchArgument(
             "mode",
-            default_value="monocular_depth_heic",
-            choices=["monocular_depth_heic", "stereo_depth_heic"],
+            default_value="monocular_depth",
+            choices=["monocular_depth", "stereo_depth"],
             description="Mode to launch.",
         )
     )
