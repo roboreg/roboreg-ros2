@@ -8,29 +8,29 @@ IOWidget::IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &ro
   setupClient(roboreg_node_name);
 
   // button
-  export_samples_button_ = new QPushButton("Export Samples", this);
+  export_data_button_ = new QPushButton("Export Data", this);
   export_tf_button_ = new QPushButton("Export Transform", this);
   import_tf_button_ = new QPushButton("Import Transform", this);
 
   // set layout
   auto layout = new QVBoxLayout(this);
-  layout->addWidget(export_samples_button_);
+  layout->addWidget(export_data_button_);
   layout->addWidget(export_tf_button_);
   layout->addWidget(import_tf_button_);
   this->setLayout(layout);
 
   // button callback
-  connect(export_samples_button_, &QPushButton::clicked, this, &IOWidget::onExportSamples_);
+  connect(export_data_button_, &QPushButton::clicked, this, &IOWidget::onExportData_);
   connect(export_tf_button_, &QPushButton::clicked, this, &IOWidget::onExportTF_);
   connect(import_tf_button_, &QPushButton::clicked, this, &IOWidget::onImportTF_);
 }
 
 void IOWidget::setupClient(const std::string &roboreg_node_name) {
-  if (export_samples_client_ptr_) {
-    export_samples_client_ptr_.reset();
+  if (export_data_client_ptr_) {
+    export_data_client_ptr_.reset();
   }
-  export_samples_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::Export>(
-      "/" + roboreg_node_name + "/export/samples");
+  export_data_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::Export>(
+      "/" + roboreg_node_name + "/export/data");
 
   if (export_tf_client_ptr_) {
     export_tf_client_ptr_.reset();
@@ -45,26 +45,26 @@ void IOWidget::setupClient(const std::string &roboreg_node_name) {
       "/" + roboreg_node_name + "/import/transform");
 }
 
-void IOWidget::onExportSamples_() {
-  if (!export_samples_client_ptr_) {
-    RCLCPP_ERROR(node_ptr_->get_logger(), "Export samples client not initialized");
+void IOWidget::onExportData_() {
+  if (!export_data_client_ptr_) {
+    RCLCPP_ERROR(node_ptr_->get_logger(), "Export data client not initialized");
     return;
   }
   auto path = QFileDialog::getExistingDirectory(nullptr, "Select output path", QDir::homePath());
-  if (!export_samples_client_ptr_->wait_for_service(std::chrono::seconds(1))) {
+  if (!export_data_client_ptr_->wait_for_service(std::chrono::seconds(1))) {
     RCLCPP_ERROR(node_ptr_->get_logger(), "Service %s not available.",
-                 export_samples_client_ptr_->get_service_name());
+                 export_data_client_ptr_->get_service_name());
     return;
   }
   auto request = std::make_shared<ros2_roboreg_idl::srv::Export::Request>();
   request->mkdir = false;
   request->path = path.toStdString();
-  auto future = export_samples_client_ptr_->async_send_request(
+  auto future = export_data_client_ptr_->async_send_request(
       request, [this](rclcpp::Client<ros2_roboreg_idl::srv::Export>::SharedFuture result) {
         if (result.get()->success) {
-          RCLCPP_INFO(node_ptr_->get_logger(), "Exported samples");
+          RCLCPP_INFO(node_ptr_->get_logger(), "Exported data");
         } else {
-          RCLCPP_ERROR(node_ptr_->get_logger(), "Failed to export samples");
+          RCLCPP_ERROR(node_ptr_->get_logger(), "Failed to export data");
         }
       });
 }
