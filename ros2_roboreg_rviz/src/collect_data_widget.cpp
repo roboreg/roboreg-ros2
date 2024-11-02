@@ -50,7 +50,8 @@ void CollectDataWidget::onCollectData_() {
   auto future = collect_data_client_ptr_->async_send_request(
       request, [this](rclcpp::Client<ros2_roboreg_idl::srv::CollectData>::SharedFuture result) {
         if (result.get()->success) {
-          count_display_->setText(QString("Collected data points: %1").arg(result.get()->n_collected));
+          count_display_->setText(
+              QString("Collected data points: %1").arg(result.get()->n_collected));
         }
       });
 }
