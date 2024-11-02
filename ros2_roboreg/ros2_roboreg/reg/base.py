@@ -1,3 +1,5 @@
+import copy
+import pathlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List
@@ -12,6 +14,8 @@ from roboreg.io import URDFParser
 from roboreg.segmentor import Sam2Segmentor
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
+
+from ros2_roboreg_idl.srv import Export, Import
 
 from ..broadcaster import StaticTFBroadcaster
 from ..data.server import Server
@@ -70,6 +74,12 @@ class Eye2HandRegistrationBase(Node, ABC):
         self._tf_broadcast_srv = self.create_service(
             Trigger, "~/broadcast_transform", self._on_tf_broadcast
         )
+        self._tf_export_srv = self.create_service(
+            Export, "~/export/transform", self._on_export_transform
+        )
+        self._tf_import_srv = self.create_service(
+            Import, "~/import/transform", self._on_import_transform
+        )
 
         # common registration utilities
         self._segmentor = Sam2Segmentor(
@@ -106,6 +116,55 @@ class Eye2HandRegistrationBase(Node, ABC):
         except Exception as e:
             res.success = False
             res.message = str(e)
+            self.get_logger().error(res.message)
+        return res
+
+    def _on_export_transform(
+        self, req: Export.Request, res: Export.Response
+    ) -> Export.Response:
+        path = pathlib.Path(req.path)
+        self.get_logger().info(f"Saving transform to {path.absolute()}")
+        res.success = True
+        try:
+            if not path.parent.exists():
+                if req.mkdir:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                else:
+                    res.success = False
+                    res.message = f"Path {path.parent.absolute()} does not exist"
+                    self.get_logger().error(res.message)
+                    return res
+            np.savetxt(path, self._ht)
+            res.message = f"Saved transform to {path.absolute()}"
+            self.get_logger().info(res.message)
+        except Exception as e:
+            res.success = False
+            res.message = str(e)
+            self.get_logger().error(res.message)
+        return res
+
+    def _on_import_transform(
+        self, req: Import.Request, res: Import.Response
+    ) -> Import.Response:
+        res.success = True
+        path = pathlib.Path(req.path)
+        try:
+            if not path.exists():
+                res.success = False
+                res.message = f"Path {path.absolute()} does not exist"
+                self.get_logger().error(res.message)
+                return res
+            self.get_logger().info(f"Loading transform from {req.path}")
+            ht = np.loadtxt(path.absolute())
+            if ht.shape != (4, 4):
+                res.success = False
+                res.message = f"Transform has wrong shape: {ht.shape}"
+                self.get_logger().error(res.message)
+                return res
+            self._ht = copy.deepcopy(ht)
+        except Exception as e:
+            res.success = False
+            res.message = f"Failed service call with: {e}"
             self.get_logger().error(res.message)
         return res
 

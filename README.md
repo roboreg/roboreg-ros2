@@ -30,25 +30,37 @@ colcon build --symlink-install
 ```
 
 ## Nodes
-### Roboreg Server
+- [Monocular Depth](#monocular-depth)
+- [Autoreg](#autoreg)
+- [Static TF Broadcaster](#static-tf-broadcaster)
+
+### Monocular Depth
+This node performs eye-to-hand calibration from RGB images and corresponding depth images. This does e.g. apply to
+
+- [RealSense](https://github.com/IntelRealSense/realsense-ros) cameras (monocular + depth)
+- [ZED](https://github.com/stereolabs/zed-ros2-wrapper) cameras (stereo + depth)
+
+To run, simply do
+
 ```shell
-ros2 launch ros2_roboreg server.launch.py -s
+ros2 launch ros2_roboreg reg.launch.py mode:=monocular_depth
 ```
 
+Sample configurations are provided in [monocular_depth.yaml](ros2_roboreg/config/monocular_depth.yaml).
+
 #### Subscriped Topics
-* `camera/camera_info` (can be multiple)
-* `camera/image_rect_color` (can be multiple)
+* `camera/image_rect_color`
+* `camera/image_rect_color/camera_info`
+* `camera/depth_registered`
+* `camera/depth_registered/camera_info`
 * `joint_states`
-* `camera/depth/registered`
-* `camera/depth/registered/camera_info`
 * `robot_description`
 
 #### Services
-* `~/collect_sample`
-* `~/clear_samples`
+* `~/collect_data`
+* `~/clear_data`
 * `~/register/hydra_icp`
-* `~/register/stereo_dr`
-* `~/export/samples`
+* `~/export/data`
 * `~/export/transform`
 * `~/import/transform`
 * `~/broadcast_transform`
