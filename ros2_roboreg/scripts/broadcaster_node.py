@@ -47,9 +47,7 @@ def main():
 
     # load ht
     ht = np.load(args.ht)
-    node.get_logger().info(
-        "Loaded homogeneous transform:\n{}".format(ht)
-    )
+    node.get_logger().info("Loaded homogeneous transform:\n{}".format(ht))
 
     static_tf_broadcaster.broadcast_tf(
         ht=ht,

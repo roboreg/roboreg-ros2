@@ -1,0 +1,43 @@
+/**/roboreg:
+  ros__parameters:
+    topics:
+      image:
+        name: /camera/image_rect_color
+        qos_reliability: BEST_EFFORT
+        camera_info:
+          name: /camera/camera_info
+          qos_reliability: BEST_EFFORT
+      depth:
+        name: /camera/depth/registered
+        qos_reliability: BEST_EFFORT
+        camera_info:
+          name: /camera/depth/registered/camera_info
+          qos_reliability: BEST_EFFORT
+      joint_state:
+        name: /joint_states
+        qos_reliability: BEST_EFFORT
+      robot_description:
+        name: /robot_description
+
+    filters:
+      sync_accuracy: 1.0
+      min_depth: 0.01
+      max_depth: 4.0
+
+    segmentation:
+      device: cuda
+      n_positive_samples: 5
+      n_negative_samples: 5
+      model_id: facebook/sam2-hiera-large
+      pth: 0.5
+
+    robot_model:
+      device: cuda
+      root_link_name: ""
+      end_link_name: ""
+      visual_meshes: False
+
+    tf_broadcaster:
+      parent_frame: world
+      child_frame: camera_frame
+      target_child_frame: camera_link

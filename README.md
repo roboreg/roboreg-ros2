@@ -12,11 +12,17 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
-- Install [roboreg](https://github.com/lbr-stack/roboreg):
+- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation):
+
+> [!NOTE]
+> When using differentiable rendering, CUDA Toolkit is required at runtime, refer [CUDA Toolkit Install Instructions](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/).
+
 ```shell
-pip3 install git+https://github.com/lbr-stack/roboreg.git
+pip3 install git+https://github.com/lbr-stack/roboreg.git@0.4.2
 ```
-- Build this wrapper
+
+- Build this `roboreg` ROS 2 integration
+
 ```shell
 mkdir -p lbr-stack/src && cd lbr-stack
 git clone https://github.com/lbr-stack/roboreg.git src/ros2_roboreg
@@ -24,23 +30,37 @@ colcon build --symlink-install
 ```
 
 ## Nodes
-### Roboreg Server
+- [Monocular Depth](#monocular-depth)
+- [Autoreg](#autoreg)
+- [Static TF Broadcaster](#static-tf-broadcaster)
+
+### Monocular Depth
+This node performs eye-to-hand calibration from RGB images and corresponding depth images. This does e.g. apply to
+
+- [RealSense](https://github.com/IntelRealSense/realsense-ros) cameras (monocular + depth)
+- [ZED](https://github.com/stereolabs/zed-ros2-wrapper) cameras (stereo + depth)
+
+To run, simply do
+
 ```shell
-ros2 launch ros2_roboreg server.launch.py -s
+ros2 launch ros2_roboreg reg.launch.py mode:=monocular_depth
 ```
 
+Sample configurations are provided in [monocular_depth.yaml](ros2_roboreg/config/monocular_depth.yaml).
+
 #### Subscriped Topics
-* `image_rect_color`
-* `camera_info` 
+* `camera/image_rect_color`
+* `camera/image_rect_color/camera_info`
+* `camera/depth_registered`
+* `camera/depth_registered/camera_info`
 * `joint_states`
-* `point_cloud/cloud_registered`
 * `robot_description`
 
 #### Services
-* `~/collect_sample`
-* `~/clear_samples`
-* `~/register`
-* `~/export/samples`
+* `~/collect_data`
+* `~/clear_data`
+* `~/register/hydra_icp`
+* `~/export/data`
 * `~/export/transform`
 * `~/import/transform`
 * `~/broadcast_transform`

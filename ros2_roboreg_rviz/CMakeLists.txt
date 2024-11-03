@@ -34,7 +34,7 @@ set(ros2_roboreg_rviz_dependencies
 add_library(
   ros2_roboreg_rviz
   SHARED
-  src/collect_sample_widget.cpp
+  src/collect_data_widget.cpp
   src/display.cpp
   src/io_widget.cpp
   src/register_widget.cpp

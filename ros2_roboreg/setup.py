@@ -23,7 +23,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "roboreg = scripts.roboreg_node:main",
+            "monocular_depth = scripts.monocular_depth_reg:main",
+            "stereo_depth = scripts.stereo_depth_reg:main",
             "broadcaster = scripts.broadcaster_node:main",
         ],
     },
