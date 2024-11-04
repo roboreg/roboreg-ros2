@@ -3,28 +3,23 @@ from typing import List
 
 from message_filters import Subscriber
 from rcl_interfaces.msg import Parameter, SetParametersResult
-from rclpy.qos import DurabilityPolicy, ReliabilityPolicy, qos_profile_system_default
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
 from ros2_roboreg_idl.srv import RegHydraICP
 
 from ..plugins.hydra_icp import HydraICP
+from ..util import QoSParams, TopicParams, qos_profile_factory
 from .base import Eye2HandRegistrationBase
 
 
 class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
     @dataclass
     class _ExtraParams:
-        image_topic: str
-        image_qos_reliability: str
-        camera_info_topic: str
-        camera_info_qos_reliability: str
-        depth_topic: str
-        depth_qos_reliability: str
-        depth_camera_info_topic: str
-        depth_camera_info_qos_reliability: str
-        joint_state_topic: str
-        joint_state_qos_reliability: str
+        image_topic: TopicParams
+        camera_info_topic: TopicParams
+        depth_topic: TopicParams
+        depth_camera_info_topic: TopicParams
+        joint_state_topic: TopicParams
 
     def __init__(self, node_name: str = "eye_to_hand_calibration") -> None:
         super().__init__(node_name)
@@ -90,75 +85,57 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
         return res
 
     def _register_synced_subscribers(self):
-        qos_profile = qos_profile_system_default
-        qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._extra_params.joint_state_qos_reliability
-        )
-        qos_profile.durability = DurabilityPolicy.VOLATILE
-        self._data_server.subscribers["joint_states"] = Subscriber(
-            self,
-            JointState,
-            self._extra_params.joint_state_topic,
-            qos_profile=qos_profile,
-        )
-        qos_profile = qos_profile_system_default
-        qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._extra_params.image_qos_reliability
-        )
-        qos_profile.durability = DurabilityPolicy.VOLATILE
-        if "compressed" in self._extra_params.image_topic:
+        qos_profile = qos_profile_factory(self._extra_params.image_topic.qos)
+        if "compressed" in self._extra_params.image_topic.name:
             self._data_server.subscribers["camera.image"] = Subscriber(
                 self,
                 CompressedImage,
-                self._extra_params.image_topic,
+                self._extra_params.image_topic.name,
                 qos_profile=qos_profile,
             )
         else:
             self._data_server.subscribers["camera.image"] = Subscriber(
                 self,
                 Image,
-                self._extra_params.image_topic,
+                self._extra_params.image_topic.name,
                 qos_profile=qos_profile,
             )
-        qos_profile = qos_profile_system_default
-        qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._extra_params.camera_info_qos_reliability
-        )
-        qos_profile.durability = DurabilityPolicy.VOLATILE
+        qos_profile = qos_profile_factory(self._extra_params.camera_info_topic.qos)
         self._data_server.subscribers["camera.image.camera_info"] = Subscriber(
             self,
             CameraInfo,
-            self._extra_params.camera_info_topic,
+            self._extra_params.camera_info_topic.name,
             qos_profile=qos_profile,
         )
-        qos_profile = qos_profile_system_default
-        qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._extra_params.depth_qos_reliability
-        )
-        qos_profile.durability = DurabilityPolicy.VOLATILE
-        if "compressed" in self._extra_params.depth_topic:
+        qos_profile = qos_profile_factory(self._extra_params.depth_topic.qos)
+        if "compressed" in self._extra_params.depth_topic.name:
             self._data_server.subscribers["camera.depth"] = Subscriber(
                 self,
                 CompressedImage,
-                self._extra_params.depth_topic,
+                self._extra_params.depth_topic.name,
                 qos_profile=qos_profile,
             )
         else:
             self._data_server.subscribers["camera.depth"] = Subscriber(
                 self,
                 Image,
-                self._extra_params.depth_topic,
+                self._extra_params.depth_topic.name,
                 qos_profile=qos_profile,
             )
-        qos_profile = qos_profile_system_default
-        qos_profile.reliability = getattr(
-            ReliabilityPolicy, self._extra_params.depth_camera_info_qos_reliability
+        qos_profile = qos_profile_factory(
+            self._extra_params.depth_camera_info_topic.qos
         )
-        qos_profile.durability = DurabilityPolicy.VOLATILE
         self._data_server.subscribers["camera.depth.camera_info"] = Subscriber(
             self,
             CameraInfo,
-            self._extra_params.depth_camera_info_topic,
+            self._extra_params.depth_camera_info_topic.name,
+            qos_profile=qos_profile,
+        )
+        qos_profile = qos_profile_factory(self._extra_params.joint_state_topic.qos)
+        self._data_server.subscribers["joint_states"] = Subscriber(
+            self,
+            JointState,
+            self._extra_params.joint_state_topic.name,
             qos_profile=qos_profile,
         )
 
@@ -174,62 +151,104 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
             namespace="",
             parameters=[
                 ("topics.image.name", "camera/image_rect_color"),
-                ("topics.image.qos_reliability", "BEST_EFFORT"),
+                ("topics.image.qos.reliability", "BEST_EFFORT"),
+                ("topics.image.qos.durability", "VOLATILE"),
                 (
                     "topics.image.camera_info.name",
                     "camera/image_rect_color/camera_info",
                 ),
-                ("topics.image.camera_info.qos_reliability", "BEST_EFFORT"),
+                ("topics.image.camera_info.qos.reliability", "BEST_EFFORT"),
+                ("topics.image.camera_info.qos.durability", "VOLATILE"),
                 ("topics.depth.name", "camera/depth_registered"),
-                ("topics.depth.qos_reliability", "BEST_EFFORT"),
+                ("topics.depth.qos.reliability", "BEST_EFFORT"),
+                ("topics.depth.qos.durability", "VOLATILE"),
                 (
                     "topics.depth.camera_info.name",
                     "camera/depth_registered/camera_info",
                 ),
-                ("topics.depth.camera_info.qos_reliability", "BEST_EFFORT"),
+                ("topics.depth.camera_info.qos.reliability", "BEST_EFFORT"),
+                ("topics.depth.camera_info.qos.durability", "VOLATILE"),
                 ("topics.joint_state.name", "joint_states"),
-                ("topics.joint_state.qos_reliability", "BEST_EFFORT"),
+                ("topics.joint_state.qos.reliability", "BEST_EFFORT"),
+                ("topics.joint_state.qos.durability", "VOLATILE"),
             ],
         )
 
     def _get_extra_parameters(self):
         self._extra_params = self._ExtraParams(
-            image_topic=self.get_parameter("topics.image.name")
-            .get_parameter_value()
-            .string_value,
-            image_qos_reliability=self.get_parameter("topics.image.qos_reliability")
-            .get_parameter_value()
-            .string_value,
-            camera_info_topic=self.get_parameter("topics.image.camera_info.name")
-            .get_parameter_value()
-            .string_value,
-            camera_info_qos_reliability=self.get_parameter(
-                "topics.image.camera_info.qos_reliability"
-            )
-            .get_parameter_value()
-            .string_value,
-            depth_topic=self.get_parameter("topics.depth.name")
-            .get_parameter_value()
-            .string_value,
-            depth_qos_reliability=self.get_parameter("topics.depth.qos_reliability")
-            .get_parameter_value()
-            .string_value,
-            depth_camera_info_topic=self.get_parameter("topics.depth.camera_info.name")
-            .get_parameter_value()
-            .string_value,
-            depth_camera_info_qos_reliability=self.get_parameter(
-                "topics.depth.camera_info.qos_reliability"
-            )
-            .get_parameter_value()
-            .string_value,
-            joint_state_topic=self.get_parameter("topics.joint_state.name")
-            .get_parameter_value()
-            .string_value,
-            joint_state_qos_reliability=self.get_parameter(
-                "topics.joint_state.qos_reliability"
-            )
-            .get_parameter_value()
-            .string_value,
+            image_topic=TopicParams(
+                name=self.get_parameter("topics.image.name")
+                .get_parameter_value()
+                .string_value,
+                qos=QoSParams(
+                    reliability=self.get_parameter("topics.image.qos.reliability")
+                    .get_parameter_value()
+                    .string_value,
+                    durability=self.get_parameter("topics.image.qos.durability")
+                    .get_parameter_value()
+                    .string_value,
+                ),
+            ),
+            camera_info_topic=TopicParams(
+                name=self.get_parameter("topics.image.camera_info.name")
+                .get_parameter_value()
+                .string_value,
+                qos=QoSParams(
+                    reliability=self.get_parameter(
+                        "topics.image.camera_info.qos.reliability"
+                    )
+                    .get_parameter_value()
+                    .string_value,
+                    durability=self.get_parameter(
+                        "topics.image.camera_info.qos.durability"
+                    )
+                    .get_parameter_value()
+                    .string_value,
+                ),
+            ),
+            depth_topic=TopicParams(
+                name=self.get_parameter("topics.depth.name")
+                .get_parameter_value()
+                .string_value,
+                qos=QoSParams(
+                    reliability=self.get_parameter("topics.depth.qos.reliability")
+                    .get_parameter_value()
+                    .string_value,
+                    durability=self.get_parameter("topics.depth.qos.durability")
+                    .get_parameter_value()
+                    .string_value,
+                ),
+            ),
+            depth_camera_info_topic=TopicParams(
+                name=self.get_parameter("topics.depth.camera_info.name")
+                .get_parameter_value()
+                .string_value,
+                qos=QoSParams(
+                    reliability=self.get_parameter(
+                        "topics.depth.camera_info.qos.reliability"
+                    )
+                    .get_parameter_value()
+                    .string_value,
+                    durability=self.get_parameter(
+                        "topics.depth.camera_info.qos.durability"
+                    )
+                    .get_parameter_value()
+                    .string_value,
+                ),
+            ),
+            joint_state_topic=TopicParams(
+                name=self.get_parameter("topics.joint_state.name")
+                .get_parameter_value()
+                .string_value,
+                qos=QoSParams(
+                    reliability=self.get_parameter("topics.joint_state.qos.reliability")
+                    .get_parameter_value()
+                    .string_value,
+                    durability=self.get_parameter("topics.joint_state.qos.durability")
+                    .get_parameter_value()
+                    .string_value,
+                ),
+            ),
         )
 
     def _on_set_extra_parameters_impl(
@@ -241,7 +260,7 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
                 self.get_logger().info(
                     f"Setting joint state topic to {parameter.value}"
                 )
-                self._extra_params.joint_state_topic = parameter.value
+                self._extra_params.joint_state_topic.name = parameter.value
                 self._reload_synced_subscribers()
             else:
                 continue

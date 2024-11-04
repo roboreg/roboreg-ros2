@@ -19,6 +19,7 @@ from ros2_roboreg_idl.srv import Export, Import
 
 from ..broadcaster import StaticTFBroadcaster
 from ..data.server import Server
+from ..util import QoSParams, TopicParams, qos_profile_factory
 
 
 class Eye2HandRegistrationBase(Node, ABC):
@@ -103,8 +104,12 @@ class Eye2HandRegistrationBase(Node, ABC):
     def _create_robot_description_sub(self) -> None:
         if self._robot_description_sub is not None:
             self.destroy_subscription(self._robot_description_sub)
+        qos_profile = qos_profile_factory(self._robot_description_topic.qos)
         self._robot_description_sub = self.create_subscription(
-            String, self._robot_description_topic, self._on_robot_description, 1
+            String,
+            self._robot_description_topic.name,
+            self._on_robot_description,
+            qos_profile,
         )
 
     def _on_tf_broadcast(self, _, res: Trigger.Response) -> Trigger.Response:
@@ -223,7 +228,9 @@ class Eye2HandRegistrationBase(Node, ABC):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("topics.robot_description.name", "/robot_description"),
+                ("topics.robot_description.name", "robot_description"),
+                ("topics.robot_description.qos.reliability", "RELIABLE"),
+                ("topics.robot_description.qos.durability", "TRANSIENT_LOCAL"),
             ],
         )
         self.declare_parameters(
@@ -255,19 +262,29 @@ class Eye2HandRegistrationBase(Node, ABC):
             ],
         )
         self.declare_parameters(
-            namespace="tf_broadcaster",
+            namespace="",
             parameters=[
-                ("parent_frame", "world"),
-                ("child_frame", "camera_frame"),
-                ("target_child_frame", "camera_link"),
+                ("tf_broadcaster.parent_frame", "world"),
+                ("tf_broadcaster.child_frame", "camera_frame"),
+                ("tf_broadcaster.target_child_frame", "camera_link"),
             ],
         )
 
     def _get_common_parameters(self) -> None:
-        self._robot_description_topic = (
-            self.get_parameter("topics.robot_description.name")
+        self._robot_description_topic = TopicParams(
+            name=self.get_parameter("topics.robot_description.name")
             .get_parameter_value()
-            .string_value
+            .string_value,
+            qos=QoSParams(
+                reliability=self.get_parameter(
+                    "topics.robot_description.qos.reliability"
+                )
+                .get_parameter_value()
+                .string_value,
+                durability=self.get_parameter("topics.robot_description.qos.durability")
+                .get_parameter_value()
+                .string_value,
+            ),
         )
         self._filter_params = self._FilterParams(
             sync_accuracy=self.get_parameter("filters.sync_accuracy")
@@ -335,7 +352,7 @@ class Eye2HandRegistrationBase(Node, ABC):
                 self.get_logger().info(
                     f"Setting robot description topic to {parameter.value}"
                 )
-                self._robot_description_topic = parameter.value
+                self._robot_description_topic.name = parameter.value
                 self._create_robot_description_sub()
             else:
                 continue
