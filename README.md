@@ -7,7 +7,7 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
 ## Table of Contents
 * [Installation](#installation)
 * [Nodes](#nodes)
-    * [Roboreg Server](#roboreg-server)
+    * [Monocular Depth](#monocular-depth)
     * [Autoreg](#autoreg)
     * [Static TF Broadcaster](#static-tf-broadcaster)
 

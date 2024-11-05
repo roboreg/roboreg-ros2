@@ -17,6 +17,13 @@ def generate_launch_description() -> LaunchDescription:
     )
     ld.add_action(
         DeclareLaunchArgument(
+            "nodename",
+            default_value="roboreg",
+            description="Name of the roboreg node.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
             "cfg_pkg",
             default_value="ros2_roboreg",
             description="Package name containing the configuration file.",
@@ -40,7 +47,7 @@ def generate_launch_description() -> LaunchDescription:
         Node(
             package="ros2_roboreg",
             executable=LaunchConfiguration("mode"),
-            name="roboreg",
+            name=LaunchConfiguration("nodename"),
             output="screen",
             parameters=[
                 PathJoinSubstitution(
