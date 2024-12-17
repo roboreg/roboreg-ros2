@@ -17,6 +17,7 @@
 #include "std_msgs/msg/string.hpp"
 
 #include "ros2_roboreg_rviz/collect_data_widget.hpp"
+#include "ros2_roboreg_rviz/formatting.hpp"
 #include "ros2_roboreg_rviz/io_widget.hpp"
 #include "ros2_roboreg_rviz/register_widget.hpp"
 #endif
@@ -41,6 +42,7 @@ private:
   rclcpp::Node::SharedPtr node_ptr_;
   rclcpp::AsyncParametersClient::UniquePtr parameters_client_;
   std::string roboreg_namespace_;
+  std::string roboreg_node_name_;
 
   CollectDataWidget *collect_data_widget_;
   RegisterWidget *register_widget_;

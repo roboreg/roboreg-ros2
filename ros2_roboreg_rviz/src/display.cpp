@@ -1,7 +1,7 @@
 #include "ros2_roboreg_rviz/display.hpp"
 
 namespace ros2_roboreg_rviz {
-Display::Display() : roboreg_namespace_("") {
+Display::Display() : roboreg_namespace_(""), roboreg_node_name_("roboreg") {
   robot_description_topic_property_ = new rviz_common::properties::RosTopicProperty(
       "Description Topic", "/robot_description",
       rosidl_generator_traits::name<std_msgs::msg::String>(),
@@ -26,8 +26,8 @@ void Display::onInitialize() {
   }
   node_ptr_ = node_abstraction->get_raw_node();
 
-  parameters_client_ =
-      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_namespace_);
+  parameters_client_ = std::make_unique<rclcpp::AsyncParametersClient>(
+      node_ptr_, format_topic(roboreg_node_name_, roboreg_namespace_));
 
   // initialize properties
   robot_description_topic_property_->initialize(node_abstraction);
@@ -48,12 +48,26 @@ void Display::onInitialize() {
 }
 
 void Display::updateRobotDescriptionTopic() {
+  if (!parameters_client_->service_is_ready()) {
+    RCLCPP_WARN(node_ptr_->get_logger(),
+                "Service not ready, cannot update robot description topic. Is roboreg running? Is "
+                "the namespace '%s' valid?",
+                roboreg_namespace_.c_str());
+    return;
+  }
   auto topic = robot_description_topic_property_->getStdString();
   RCLCPP_INFO(node_ptr_->get_logger(), "Updating robot description topic to: %s", topic.c_str());
   parameters_client_->set_parameters({rclcpp::Parameter("topics.robot_description.name", topic)});
 }
 
 void Display::updateJointStateTopic() {
+  if (!parameters_client_->service_is_ready()) {
+    RCLCPP_WARN(node_ptr_->get_logger(),
+                "Service not ready, cannot update joint states topic. Is roboreg running? Is the "
+                "namespace '%s' valid?",
+                roboreg_namespace_.c_str());
+    return;
+  }
   auto topic = joint_state_topic_property_->getStdString();
   RCLCPP_INFO(node_ptr_->get_logger(), "Updating joint state topic to: %s", topic.c_str());
   parameters_client_->set_parameters({rclcpp::Parameter("topics.joint_state.name", topic)});
@@ -65,8 +79,8 @@ void Display::updateRoboregNode() {
   register_widget_->setupClient(roboreg_namespace_);
   io_widget_->setupClient(roboreg_namespace_);
   parameters_client_.reset();
-  parameters_client_ =
-      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_namespace_);
+  parameters_client_ = std::make_unique<rclcpp::AsyncParametersClient>(
+      node_ptr_, format_topic(roboreg_node_name_, roboreg_namespace_));
 }
 } // end of namespace ros2_roboreg_rviz
 

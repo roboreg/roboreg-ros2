@@ -178,33 +178,36 @@ class Eye2HandRegistrationBase(Node, ABC):
         return res
 
     def _on_robot_description(self, msg: String) -> None:
-        self._urdf_parser.from_urdf(msg.data)
-        if self._robot_model_params.root_link_name == "":
-            self._robot_model_params.root_link_name = (
-                self._urdf_parser.link_names_with_meshes(
-                    self._robot_model_params.visual_meshes
-                )[0]
-            )
-            self.get_logger().info(
-                f"No root link name specified. Using first link with mesh: {self._robot_model_params.root_link_name}"
-            )
-        if self._robot_model_params.end_link_name == "":
-            self._robot_model_params.end_link_name = (
-                self._urdf_parser.link_names_with_meshes(
-                    self._robot_model_params.visual_meshes
-                )[-1]
-            )
-            self.get_logger().info(
-                f"No end link name specified. Using last link with mesh: {self._robot_model_params.end_link_name}"
-            )
+        try:
+            self._urdf_parser.from_urdf(msg.data)
+            if self._robot_model_params.root_link_name == "":
+                self._robot_model_params.root_link_name = (
+                    self._urdf_parser.link_names_with_meshes(
+                        self._robot_model_params.visual_meshes
+                    )[0]
+                )
+                self.get_logger().info(
+                    f"No root link name specified. Using first link with mesh: {self._robot_model_params.root_link_name}"
+                )
+            if self._robot_model_params.end_link_name == "":
+                self._robot_model_params.end_link_name = (
+                    self._urdf_parser.link_names_with_meshes(
+                        self._robot_model_params.visual_meshes
+                    )[-1]
+                )
+                self.get_logger().info(
+                    f"No end link name specified. Using last link with mesh: {self._robot_model_params.end_link_name}"
+                )
 
-        self.get_logger().info("Instantiating kinematics on robot description.")
-        self._kinematics = rrd.TorchKinematics(
-            urdf_parser=self._urdf_parser,
-            root_link_name=self._robot_model_params.root_link_name,
-            end_link_name=self._robot_model_params.end_link_name,
-            device=self._robot_model_params.device,
-        )
+            self.get_logger().info("Instantiating kinematics on robot description.")
+            self._kinematics = rrd.TorchKinematics(
+                urdf_parser=self._urdf_parser,
+                root_link_name=self._robot_model_params.root_link_name,
+                end_link_name=self._robot_model_params.end_link_name,
+                device=self._robot_model_params.device,
+            )
+        except Exception as e:
+            self.get_logger().error(f"Failed to parse URDF: {e}")
 
     def _instantiate_meshes(self, batch_size: int) -> None:
         if self._kinematics is None:
