@@ -40,7 +40,11 @@ class HydraICP:
         intrinsics = torch.tensor(intrinsics, dtype=torch.float32, device=device)
         depths = torch.tensor(np.array(depths), dtype=torch.float32, device=device)
         xyzs = depth_to_xyz(
-            depth=depths, intrinsics=intrinsics, z_min=z_min, z_max=z_max
+            depth=depths,
+            intrinsics=intrinsics,
+            z_min=z_min,
+            z_max=z_max,
+            conversion_factor=1.0,  # assume depth is in meters
         )
 
         # flatten BxHxWx3 -> Bx(H*W)x3
