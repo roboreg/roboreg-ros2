@@ -15,11 +15,9 @@
 namespace ros2_roboreg_rviz {
 class RegisterWidget : public QWidget {
 public:
-  RegisterWidget(rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "",
-                 const std::string &roboreg_node_name = "roboreg", QWidget *parent = nullptr);
+  RegisterWidget(rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "", QWidget *parent = nullptr);
 
-  void setupClient(const std::string &roboreg_namespace = "",
-                   const std::string &roboreg_node_name = "roboreg");
+  void setupClient(const std::string &roboreg_namespace = "");
 
 protected:
   void onRegister_();

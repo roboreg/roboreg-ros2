@@ -41,7 +41,6 @@ private:
   rclcpp::Node::SharedPtr node_ptr_;
   rclcpp::AsyncParametersClient::UniquePtr parameters_client_;
   std::string roboreg_namespace_;
-  std::string roboreg_node_name_;
 
   CollectDataWidget *collect_data_widget_;
   RegisterWidget *register_widget_;

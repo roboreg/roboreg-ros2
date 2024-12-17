@@ -17,11 +17,9 @@
 namespace ros2_roboreg_rviz {
 class IOWidget : public QWidget {
 public:
-  IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "",
-           const std::string &roboreg_node_name = "roboreg", QWidget *parent = nullptr);
+  IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "", QWidget *parent = nullptr);
 
-  void setupClient(const std::string &roboreg_namespace = "",
-                   const std::string &roboreg_node_name = "roboreg");
+  void setupClient(const std::string &roboreg_namespace = "");
 
 protected:
   void onExportData_();
