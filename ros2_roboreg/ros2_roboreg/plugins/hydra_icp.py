@@ -5,15 +5,14 @@ import numpy as np
 import torch
 from roboreg.differentiable import TorchKinematics, TorchMeshContainer
 from roboreg.hydra_icp import hydra_centroid_alignment, hydra_robust_icp
-from roboreg.util.mask import mask_boundary
+from roboreg.util.mask import mask_extract_boundary
 from roboreg.util.points import (
     clean_xyz,
     compute_vertex_normals,
-    depth_to_xyz,
     from_homogeneous,
-    generate_ht_optical,
     to_homogeneous,
 )
+from roboreg.util.transform import depth_to_xyz, generate_ht_optical
 
 
 class HydraICP:
@@ -73,7 +72,7 @@ class HydraICP:
                 clean_xyz(
                     xyz=pcl,
                     mask=(
-                        mask_boundary(
+                        mask_extract_boundary(
                             mask,
                             erosion_kernel=np.ones(
                                 [params.erosion_kernel_size, params.erosion_kernel_size]
