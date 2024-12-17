@@ -86,20 +86,16 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
 
     def _register_synced_subscribers(self):
         qos_profile = qos_profile_factory(self._extra_params.image_topic.qos)
-        if "compressed" in self._extra_params.image_topic.name:
-            self._data_server.subscribers["camera.image"] = Subscriber(
-                self,
-                CompressedImage,
-                self._extra_params.image_topic.name,
-                qos_profile=qos_profile,
-            )
-        else:
-            self._data_server.subscribers["camera.image"] = Subscriber(
-                self,
-                Image,
-                self._extra_params.image_topic.name,
-                qos_profile=qos_profile,
-            )
+        self._data_server.subscribers["camera.image"] = Subscriber(
+            self,
+            (
+                CompressedImage
+                if "compressed" in self._extra_params.image_topic.name
+                else Image
+            ),
+            self._extra_params.image_topic.name,
+            qos_profile=qos_profile,
+        )
         qos_profile = qos_profile_factory(self._extra_params.camera_info_topic.qos)
         self._data_server.subscribers["camera.image.camera_info"] = Subscriber(
             self,
@@ -108,20 +104,16 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
             qos_profile=qos_profile,
         )
         qos_profile = qos_profile_factory(self._extra_params.depth_topic.qos)
-        if "compressed" in self._extra_params.depth_topic.name:
-            self._data_server.subscribers["camera.depth"] = Subscriber(
-                self,
-                CompressedImage,
-                self._extra_params.depth_topic.name,
-                qos_profile=qos_profile,
-            )
-        else:
-            self._data_server.subscribers["camera.depth"] = Subscriber(
-                self,
-                Image,
-                self._extra_params.depth_topic.name,
-                qos_profile=qos_profile,
-            )
+        self._data_server.subscribers["camera.depth"] = Subscriber(
+            self,
+            (
+                CompressedImage
+                if "compressed" in self._extra_params.depth_topic.name
+                else Image
+            ),
+            self._extra_params.depth_topic.name,
+            qos_profile=qos_profile,
+        )
         qos_profile = qos_profile_factory(
             self._extra_params.depth_camera_info_topic.qos
         )
