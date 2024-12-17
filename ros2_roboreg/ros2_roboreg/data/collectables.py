@@ -53,38 +53,53 @@ class Collectable(ABC, Generic[T]):
 
 
 class ImageCollectable(Collectable[Image]):
-    def __init__(self, msg: Image, desired_encoding: str = "passthrough"):
+    def __init__(self, msg: Image):
         super().__init__(msg)
         self._cv_bridge = cv_bridge.CvBridge()
-        self._desired_encoding = desired_encoding
 
     def to_numpy(self) -> np.ndarray:
-        return self._cv_bridge.imgmsg_to_cv2(
-            self._msg, desired_encoding=self._desired_encoding
-        )
+        # two conventions:
+        #   - any color to bgr8
+        #   - any depth to 32FC1 (meters)
+        encoding = self._msg.encoding
+        if (
+            encoding == "rgb8"
+            or encoding == "bgr8"
+            or encoding == "rgba8"
+            or encoding == "bgra8"
+        ):  # color image
+            return self._cv_bridge.imgmsg_to_cv2(self._msg, desired_encoding="bgr8")
+        elif encoding == "16UC1":  # depth image in mm
+            return (
+                self._cv_bridge.imgmsg_to_cv2(self._msg, desired_encoding="32FC1")
+                / 1000.0
+            )
+        elif encoding == "32FC1":  # depth image in meters
+            return self._cv_bridge.imgmsg_to_cv2(self._msg, desired_encoding="32FC1")
+        else:
+            raise ValueError(f"Unsupported encoding {self._msg.encoding}")
 
     def to_disk(self, path: pathlib.Path, filename: str, mkdir: bool = True):
         super().to_disk(path, filename=filename, mkdir=mkdir)
-        print(self._msg.encoding)
-        if self._msg.encoding == "bgr8":  # color image
+        if (
+            self._msg.encoding == "rgb8"
+            or self._msg.encoding == "bgr8"
+            or self._msg.encoding == "rgba8"
+            or self._msg.encoding == "bgra8"
+        ):  # save color image as png
             cv2.imwrite(str(path / (filename + ".png")), self.to_numpy())
-        elif self._msg.encoding == "rgb8":  # color image
-            cv2.imwrite(
-                str(path / (filename + ".png")),
-                cv2.cvtColor(self.to_numpy(), cv2.COLOR_RGB2BGR),
-            )
-        elif self._msg.encoding == "16UC1":  # depth image
-            depth = self.to_numpy()
-            np.save(path / (filename + ".npy"), depth)
+        elif (
+            self._msg.encoding == "16UC1" or self._msg.encoding == "32FC1"
+        ):  # save depth image as numpy array
+            np.save(path / (filename + ".npy"), self.to_numpy())
         else:
             raise ValueError(f"Unsupported encoding {self._msg.encoding}")
 
 
 class CompressedImageCollectable(Collectable[CompressedImage]):
-    def __init__(self, msg: CompressedImage, desired_encoding: str = "passthrough"):
+    def __init__(self, msg: CompressedImage):
         super().__init__(msg)
         self._cv_bridge = cv_bridge.CvBridge()
-        self._desired_encoding = desired_encoding
 
     def to_numpy(self) -> np.ndarray:
         _, compr_type = self._msg.format.split(";")
@@ -92,23 +107,29 @@ class CompressedImageCollectable(Collectable[CompressedImage]):
             return decode_depth(
                 self._msg
             )  # converts to depth in meters of type float32
-        return self._cv_bridge.compressed_imgmsg_to_cv2(
-            self._msg, desired_encoding=self._desired_encoding
-        )
+        elif (
+            "rgb8" in compr_type
+            or "bgr8" in compr_type
+            or "rgba8" in compr_type
+            or "bgra8" in compr_type
+        ):
+            return self._cv_bridge.compressed_imgmsg_to_cv2(
+                self._msg, desired_encoding="bgr8"
+            )
+        else:
+            raise ValueError(f"Unsupported format {self._msg.format}")
 
     def to_disk(self, path: pathlib.Path, filename: str, mkdir: bool = True):
         super().to_disk(path, filename=filename, mkdir=mkdir)
-        if "16UC1" in self._msg.format:
+        if "16UC1" in self._msg.format or "32FC1" in self._msg.format:
             np.save(path / (filename + ".npy"), self.to_numpy())
-        elif "32FC1" in self._msg.format:
-            np.save(path / (filename + ".npy"), self.to_numpy())
-        elif "bgr8" in self._msg.format:
+        elif (
+            "rgb8" in self._msg.format
+            or "bgr8" in self._msg.format
+            or "rgba8" in self._msg.format
+            or "bgra8" in self._msg.format
+        ):
             cv2.imwrite(str(path / (filename + ".png")), self.to_numpy())
-        elif "rgb8" in self._msg.format:
-            cv2.imwrite(
-                str(path / (filename + ".png")),
-                cv2.cvtColor(self.to_numpy(), cv2.COLOR_RGB2BGR),
-            )
         else:
             raise ValueError(f"Unsupported format {self._msg.format}")
 
