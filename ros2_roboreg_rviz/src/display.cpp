@@ -1,20 +1,20 @@
 #include "ros2_roboreg_rviz/display.hpp"
 
 namespace ros2_roboreg_rviz {
-Display::Display() : roboreg_node_name_("roboreg") {
+Display::Display() : roboreg_namespace_(""), roboreg_node_name_("roboreg") {
   robot_description_topic_property_ = new rviz_common::properties::RosTopicProperty(
-      "Description Topic", "robot_description",
+      "Description Topic", "/robot_description",
       rosidl_generator_traits::name<std_msgs::msg::String>(),
       "Topic under which the robot description is published.", this,
       SLOT(updateRobotDescriptionTopic()), this);
   joint_state_topic_property_ = new rviz_common::properties::RosTopicProperty(
-      "Joint State Topic", "joint_states",
+      "Joint State Topic", "/joint_states",
       rosidl_generator_traits::name<sensor_msgs::msg::JointState>(),
       "Topic under which the joint states are published.", this, SLOT(updateJointStateTopic()),
       this);
-  roboreg_node_name_property_ = new rviz_common::properties::StringProperty(
-      "Roboreg Node Name", roboreg_node_name_.c_str(),
-      "The node name under which the roboreg server lives.", this, SLOT(updateRoboregNode()), this);
+  roboreg_namespace_property_ = new rviz_common::properties::StringProperty(
+      "Roboreg Namespace", roboreg_namespace_.c_str(),
+      "The namespace under which the roboreg server lives.", this, SLOT(updateRoboregNode()), this);
 }
 
 void Display::onInitialize() {
@@ -27,7 +27,7 @@ void Display::onInitialize() {
   node_ptr_ = node_abstraction->get_raw_node();
 
   parameters_client_ =
-      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_node_name_);
+      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_namespace_);
 
   // initialize properties
   robot_description_topic_property_->initialize(node_abstraction);
@@ -35,9 +35,10 @@ void Display::onInitialize() {
 
   // add a collect data and save synced data widgets
   auto widget = new QWidget();
-  collect_data_widget_ = new CollectDataWidget(node_ptr_, roboreg_node_name_, widget);
-  register_widget_ = new RegisterWidget(node_ptr_, roboreg_node_name_, widget);
-  io_widget_ = new IOWidget(node_ptr_, roboreg_node_name_, widget);
+  collect_data_widget_ =
+      new CollectDataWidget(node_ptr_, roboreg_namespace_, roboreg_node_name_, widget);
+  register_widget_ = new RegisterWidget(node_ptr_, roboreg_namespace_, roboreg_node_name_, widget);
+  io_widget_ = new IOWidget(node_ptr_, roboreg_namespace_, roboreg_node_name_, widget);
   setAssociatedWidget(widget);
 
   // set layout
@@ -60,13 +61,13 @@ void Display::updateJointStateTopic() {
 }
 
 void Display::updateRoboregNode() {
-  roboreg_node_name_ = roboreg_node_name_property_->getStdString();
-  collect_data_widget_->setupClient(roboreg_node_name_);
-  register_widget_->setupClient(roboreg_node_name_);
-  io_widget_->setupClient(roboreg_node_name_);
+  roboreg_namespace_ = roboreg_namespace_property_->getStdString();
+  collect_data_widget_->setupClient(roboreg_namespace_, roboreg_node_name_);
+  register_widget_->setupClient(roboreg_namespace_, roboreg_node_name_);
+  io_widget_->setupClient(roboreg_namespace_, roboreg_node_name_);
   parameters_client_.reset();
   parameters_client_ =
-      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_node_name_);
+      std::make_unique<rclcpp::AsyncParametersClient>(node_ptr_, roboreg_namespace_);
 }
 } // end of namespace ros2_roboreg_rviz
 

@@ -12,14 +12,16 @@
 
 #include "ros2_roboreg_idl/srv/export.hpp"
 #include "ros2_roboreg_idl/srv/import.hpp"
+#include "ros2_roboreg_rviz/formatting.hpp"
 
 namespace ros2_roboreg_rviz {
 class IOWidget : public QWidget {
 public:
-  IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_node_name = "roboreg",
-           QWidget *parent = nullptr);
+  IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "",
+           const std::string &roboreg_node_name = "roboreg", QWidget *parent = nullptr);
 
-  void setupClient(const std::string &roboreg_node_name);
+  void setupClient(const std::string &roboreg_namespace = "",
+                   const std::string &roboreg_node_name = "roboreg");
 
 protected:
   void onExportData_();

@@ -25,7 +25,7 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
         super().__init__(node_name)
 
         self._hydra_icp_srv = self.create_service(
-            RegHydraICP, "~/register/hydra_icp", self._on_hydra_icp
+            RegHydraICP, "register/hydra_icp", self._on_hydra_icp
         )
 
     def _on_hydra_icp(
@@ -142,25 +142,25 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICP):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("topics.image.name", "camera/image_rect_color"),
+                ("topics.image.name", "/camera/image_rect_color"),
                 ("topics.image.qos.reliability", "BEST_EFFORT"),
                 ("topics.image.qos.durability", "VOLATILE"),
                 (
                     "topics.image.camera_info.name",
-                    "camera/image_rect_color/camera_info",
+                    "/camera/image_rect_color/camera_info",
                 ),
                 ("topics.image.camera_info.qos.reliability", "BEST_EFFORT"),
                 ("topics.image.camera_info.qos.durability", "VOLATILE"),
-                ("topics.depth.name", "camera/depth_registered"),
+                ("topics.depth.name", "/camera/depth_registered"),
                 ("topics.depth.qos.reliability", "BEST_EFFORT"),
                 ("topics.depth.qos.durability", "VOLATILE"),
                 (
                     "topics.depth.camera_info.name",
-                    "camera/depth_registered/camera_info",
+                    "/camera/depth_registered/camera_info",
                 ),
                 ("topics.depth.camera_info.qos.reliability", "BEST_EFFORT"),
                 ("topics.depth.camera_info.qos.durability", "VOLATILE"),
-                ("topics.joint_state.name", "joint_states"),
+                ("topics.joint_state.name", "/joint_states"),
                 ("topics.joint_state.qos.reliability", "BEST_EFFORT"),
                 ("topics.joint_state.qos.durability", "VOLATILE"),
             ],

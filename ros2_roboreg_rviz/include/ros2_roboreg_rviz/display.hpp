@@ -40,6 +40,7 @@ private Q_SLOTS:
 private:
   rclcpp::Node::SharedPtr node_ptr_;
   rclcpp::AsyncParametersClient::UniquePtr parameters_client_;
+  std::string roboreg_namespace_;
   std::string roboreg_node_name_;
 
   CollectDataWidget *collect_data_widget_;
@@ -49,7 +50,7 @@ private:
   // properties
   rviz_common::properties::RosTopicProperty *robot_description_topic_property_;
   rviz_common::properties::RosTopicProperty *joint_state_topic_property_;
-  rviz_common::properties::StringProperty *roboreg_node_name_property_;
+  rviz_common::properties::StringProperty *roboreg_namespace_property_;
 };
 } // end of namespace ros2_roboreg_rviz
 #endif // ROS2_ROBOREG_RVIZ__DISPLAY_HPP_

@@ -26,6 +26,7 @@ pip3 install git+https://github.com/lbr-stack/roboreg.git@0.4.4
 ```shell
 mkdir -p lbr-stack/src && cd lbr-stack
 git clone https://github.com/lbr-stack/roboreg.git src/ros2_roboreg
+rosdep install --from-paths src -r -i -y
 colcon build --symlink-install
 ```
 
@@ -38,7 +39,7 @@ colcon build --symlink-install
 This node performs eye-to-hand calibration from RGB images and corresponding depth images. This does e.g. apply to
 
 - [RealSense](https://github.com/IntelRealSense/realsense-ros) cameras (monocular + depth)
-- [ZED](https://github.com/stereolabs/zed-ros2-wrapper) cameras (stereo + depth)
+- [ZED](https://github.com/stereolabs/zed-ros2-wrapper) cameras (monocular or stereo + depth)
 
 To run, simply do
 
@@ -49,21 +50,21 @@ ros2 launch ros2_roboreg reg.launch.py mode:=monocular_depth
 Sample configurations are provided in [monocular_depth.yaml](ros2_roboreg/config/monocular_depth.yaml). Please note that compressed image / depth topics are also supported.
 
 #### Subscriped Topics
-* `camera/image_rect_color`
-* `camera/image_rect_color/camera_info`
-* `camera/depth_registered`
-* `camera/depth_registered/camera_info`
-* `joint_states`
-* `robot_description`
+* `/camera/image_rect_color`
+* `/camera/image_rect_color/camera_info`
+* `/camera/depth_registered`
+* `/camera/depth_registered/camera_info`
+* `/joint_states`
+* `/robot_description`
 
 #### Services
-* `~/collect_data`
-* `~/clear_data`
-* `~/register/hydra_icp`
-* `~/export/data`
-* `~/export/transform`
-* `~/import/transform`
-* `~/broadcast_transform`
+* `collect_data`
+* `clear_data`
+* `register/hydra_icp`
+* `export/data`
+* `export/transform`
+* `import/transform`
+* `broadcast_transform`
 
 ### Autoreg
 Utility node for executing trajectory via `ros2_control` and collecting samples via `ros2_roboreg`.

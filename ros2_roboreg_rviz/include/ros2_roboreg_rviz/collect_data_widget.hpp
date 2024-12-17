@@ -12,15 +12,17 @@
 #include "std_srvs/srv/trigger.hpp"
 
 #include "ros2_roboreg_idl/srv/collect_data.hpp"
+#include "ros2_roboreg_rviz/formatting.hpp"
 
 namespace ros2_roboreg_rviz {
 class CollectDataWidget : public QWidget {
 
 public:
-  CollectDataWidget(rclcpp::Node::SharedPtr node_ptr,
+  CollectDataWidget(rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "",
                     const std::string &roboreg_node_name = "roboreg", QWidget *parent = nullptr);
 
-  void setupClient(const std::string &roboreg_node_name);
+  void setupClient(const std::string &roboreg_namespace = "",
+                   const std::string &roboreg_node_name = "roboreg");
 
 protected:
   void onCollectData_();

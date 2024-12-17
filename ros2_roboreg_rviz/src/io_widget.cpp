@@ -2,10 +2,10 @@
 
 namespace ros2_roboreg_rviz {
 
-IOWidget::IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_node_name,
-                   QWidget *parent)
+IOWidget::IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace,
+                   const std::string &roboreg_node_name, QWidget *parent)
     : QWidget(parent), node_ptr_(node_ptr) {
-  setupClient(roboreg_node_name);
+  setupClient(roboreg_namespace, roboreg_node_name);
 
   // button
   export_data_button_ = new QPushButton("Export Data", this);
@@ -25,24 +25,25 @@ IOWidget::IOWidget(const rclcpp::Node::SharedPtr node_ptr, const std::string &ro
   connect(import_tf_button_, &QPushButton::clicked, this, &IOWidget::onImportTF_);
 }
 
-void IOWidget::setupClient(const std::string &roboreg_node_name) {
+void IOWidget::setupClient(const std::string &roboreg_namespace,
+                           const std::string &roboreg_node_name) {
   if (export_data_client_ptr_) {
     export_data_client_ptr_.reset();
   }
   export_data_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::Export>(
-      "/" + roboreg_node_name + "/export/data");
+      format_topic(roboreg_node_name + "/export/data", roboreg_namespace));
 
   if (export_tf_client_ptr_) {
     export_tf_client_ptr_.reset();
   }
   export_tf_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::Export>(
-      "/" + roboreg_node_name + "/export/transform");
+      format_topic(roboreg_node_name + "/export/transform", roboreg_namespace));
 
   if (import_tf_client_ptr_) {
     import_tf_client_ptr_.reset();
   }
   import_tf_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::Import>(
-      "/" + roboreg_node_name + "/import/transform");
+      format_topic(roboreg_node_name + "/import/transform", roboreg_namespace));
 }
 
 void IOWidget::onExportData_() {

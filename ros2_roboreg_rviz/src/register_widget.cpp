@@ -2,9 +2,10 @@
 
 namespace ros2_roboreg_rviz {
 RegisterWidget::RegisterWidget(rclcpp::Node::SharedPtr node_ptr,
+                               const std::string &roboreg_namespace,
                                const std::string &roboreg_node_name, QWidget *parent)
     : QWidget(parent), node_ptr_(node_ptr) {
-  setupClient(roboreg_node_name);
+  setupClient(roboreg_namespace, roboreg_node_name);
 
   // button
   register_button_ = new QPushButton("Register", this);
@@ -21,17 +22,18 @@ RegisterWidget::RegisterWidget(rclcpp::Node::SharedPtr node_ptr,
   connect(broadcast_tf_button_, &QPushButton::clicked, this, &RegisterWidget::onBroadcastTF_);
 }
 
-void RegisterWidget::setupClient(const std::string &roboreg_node_name) {
+void RegisterWidget::setupClient(const std::string &roboreg_namespace,
+                                 const std::string &roboreg_node_name) {
   if (register_client_ptr_) {
     register_client_ptr_.reset();
   }
   register_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::RegHydraICP>(
-      "/" + roboreg_node_name + "/register/hydra_icp");
+      format_topic(roboreg_node_name + "/register/hydra_icp", roboreg_namespace));
   if (broadcast_tf_client_ptr_) {
     broadcast_tf_client_ptr_.reset();
   }
   broadcast_tf_client_ptr_ = node_ptr_->create_client<std_srvs::srv::Trigger>(
-      "/" + roboreg_node_name + "/broadcast_transform");
+      format_topic(roboreg_node_name + "/broadcast_transform", roboreg_namespace));
 }
 
 void RegisterWidget::onRegister_() {

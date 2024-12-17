@@ -27,7 +27,7 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
         super().__init__(node_name)
 
         self._hydra_icp_srv = self.create_service(
-            RegHydraICP, "~/register/hydra_icp", self._on_hydra_icp
+            RegHydraICP, "register/hydra_icp", self._on_hydra_icp
         )
 
     def _on_hydra_icp(
@@ -164,34 +164,34 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("topics.left_image.name", "camera/left/image_rect_color"),
+                ("topics.left_image.name", "/camera/left/image_rect_color"),
                 ("topics.left_image.qos.reliability", "BEST_EFFORT"),
                 ("topics.left_image.qos.durability", "VOLATILE"),
                 (
                     "topics.left_image.camera_info.name",
-                    "camera/left/image_rect_color/camera_info",
+                    "/camera/left/image_rect_color/camera_info",
                 ),
                 ("topics.left_image.camera_info.qos.reliability", "BEST_EFFORT"),
                 ("topics.left_image.camera_info.qos.durability", "VOLATILE"),
-                ("topics.right_image.name", "camera/right/image_rect_color"),
+                ("topics.right_image.name", "/camera/right/image_rect_color"),
                 ("topics.right_image.qos.reliability", "BEST_EFFORT"),
                 ("topics.right_image.qos.durability", "VOLATILE"),
                 (
                     "topics.right_image.camera_info.name",
-                    "camera/right/image_rect_color/camera_info",
+                    "/camera/right/image_rect_color/camera_info",
                 ),
                 ("topics.right_image.camera_info.qos.reliability", "BEST_EFFORT"),
                 ("topics.right_image.camera_info.qos.durability", "VOLATILE"),
-                ("topics.depth.name", "camera/depth_registered"),
+                ("topics.depth.name", "/camera/depth_registered"),
                 ("topics.depth.qos.reliability", "BEST_EFFORT"),
                 ("topics.depth.qos.durability", "VOLATILE"),
                 (
                     "topics.depth.camera_info.name",
-                    "camera/depth_registered/camera_info",
+                    "/camera/depth_registered/camera_info",
                 ),
                 ("topics.depth.camera_info.qos.reliability", "BEST_EFFORT"),
                 ("topics.depth.camera_info.qos.durability", "VOLATILE"),
-                ("topics.joint_state.name", "joint_states"),
+                ("topics.joint_state.name", "/joint_states"),
                 ("topics.joint_state.qos.reliability", "BEST_EFFORT"),
                 ("topics.joint_state.qos.durability", "VOLATILE"),
             ],

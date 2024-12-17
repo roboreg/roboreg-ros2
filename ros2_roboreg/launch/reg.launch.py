@@ -17,9 +17,9 @@ def generate_launch_description() -> LaunchDescription:
     )
     ld.add_action(
         DeclareLaunchArgument(
-            "node_name",
-            default_value="roboreg",
-            description="Name of the roboreg node.",
+            "namespace",
+            default_value="",
+            description="Namespace for the roboreg node.",
         )
     )
     ld.add_action(
@@ -47,7 +47,7 @@ def generate_launch_description() -> LaunchDescription:
         Node(
             package="ros2_roboreg",
             executable=LaunchConfiguration("mode"),
-            name=LaunchConfiguration("node_name"),
+            name="roboreg",
             output="screen",
             parameters=[
                 PathJoinSubstitution(
@@ -58,6 +58,7 @@ def generate_launch_description() -> LaunchDescription:
                 ),
                 {"use_sim_time": LaunchConfiguration("use_sim_time")},
             ],
+            namespace=LaunchConfiguration("namespace"),
             emulate_tty=True,
         )
     )

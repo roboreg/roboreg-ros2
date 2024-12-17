@@ -29,13 +29,13 @@ class Server(ABC):
 
         # services
         self._collect_data_srv = self._node.create_service(
-            CollectData, "~/collect_data", self._on_collect_data
+            CollectData, "collect_data", self._on_collect_data
         )
         self._clear_data_srv = self._node.create_service(
-            Trigger, "~/clear_data", self._on_clear_data
+            Trigger, "clear_data", self._on_clear_data
         )
         self._save_data_srv = self._node.create_service(
-            Export, "~/export/data", self._on_save_data
+            Export, "export/data", self._on_save_data
         )
 
     @property

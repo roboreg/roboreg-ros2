@@ -73,13 +73,13 @@ class Eye2HandRegistrationBase(Node, ABC):
         self._ht = np.eye(4)
         self._tf_broadcaster = StaticTFBroadcaster(node=self)
         self._tf_broadcast_srv = self.create_service(
-            Trigger, "~/broadcast_transform", self._on_tf_broadcast
+            Trigger, "broadcast_transform", self._on_tf_broadcast
         )
         self._tf_export_srv = self.create_service(
-            Export, "~/export/transform", self._on_export_transform
+            Export, "export/transform", self._on_export_transform
         )
         self._tf_import_srv = self.create_service(
-            Import, "~/import/transform", self._on_import_transform
+            Import, "import/transform", self._on_import_transform
         )
 
         # common registration utilities
@@ -228,7 +228,7 @@ class Eye2HandRegistrationBase(Node, ABC):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("topics.robot_description.name", "robot_description"),
+                ("topics.robot_description.name", "/robot_description"),
                 ("topics.robot_description.qos.reliability", "RELIABLE"),
                 ("topics.robot_description.qos.durability", "TRANSIENT_LOCAL"),
             ],

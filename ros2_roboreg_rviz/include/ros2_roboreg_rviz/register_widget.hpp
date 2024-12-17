@@ -10,14 +10,16 @@
 #include "std_srvs/srv/trigger.hpp"
 
 #include "ros2_roboreg_idl/srv/reg_hydra_icp.hpp"
+#include "ros2_roboreg_rviz/formatting.hpp"
 
 namespace ros2_roboreg_rviz {
 class RegisterWidget : public QWidget {
 public:
-  RegisterWidget(rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_node_name = "roboreg",
-                 QWidget *parent = nullptr);
+  RegisterWidget(rclcpp::Node::SharedPtr node_ptr, const std::string &roboreg_namespace = "",
+                 const std::string &roboreg_node_name = "roboreg", QWidget *parent = nullptr);
 
-  void setupClient(const std::string &roboreg_node_name);
+  void setupClient(const std::string &roboreg_namespace = "",
+                   const std::string &roboreg_node_name = "roboreg");
 
 protected:
   void onRegister_();

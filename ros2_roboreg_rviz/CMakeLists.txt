@@ -36,6 +36,7 @@ add_library(
   SHARED
   src/collect_data_widget.cpp
   src/display.cpp
+  src/formatting.cpp
   src/io_widget.cpp
   src/register_widget.cpp
   include/ros2_roboreg_rviz/display.hpp # for Qt MOC

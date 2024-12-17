@@ -2,9 +2,10 @@
 
 namespace ros2_roboreg_rviz {
 CollectDataWidget::CollectDataWidget(rclcpp::Node::SharedPtr node_ptr,
+                                     const std::string &roboreg_namespace,
                                      const std::string &roboreg_node_name, QWidget *parent)
     : QWidget(parent), node_ptr_(node_ptr) {
-  setupClient(roboreg_node_name);
+  setupClient(roboreg_namespace, roboreg_node_name);
 
   // button and count label
   collect_data_button_ = new QPushButton("Collect Data", this);
@@ -23,17 +24,18 @@ CollectDataWidget::CollectDataWidget(rclcpp::Node::SharedPtr node_ptr,
   connect(clear_data_button_, &QPushButton::clicked, this, &CollectDataWidget::onClearData_);
 }
 
-void CollectDataWidget::setupClient(const std::string &roboreg_node_name) {
+void CollectDataWidget::setupClient(const std::string &roboreg_namespace,
+                                    const std::string &roboreg_node_name) {
   if (collect_data_client_ptr_) {
     collect_data_client_ptr_.reset();
   }
   collect_data_client_ptr_ = node_ptr_->create_client<ros2_roboreg_idl::srv::CollectData>(
-      "/" + roboreg_node_name + "/collect_data");
+      format_topic(roboreg_node_name + "/collect_data", roboreg_namespace));
   if (clear_data_client_ptr_) {
     clear_data_client_ptr_.reset();
   }
-  clear_data_client_ptr_ =
-      node_ptr_->create_client<std_srvs::srv::Trigger>("/" + roboreg_node_name + "/clear_data");
+  clear_data_client_ptr_ = node_ptr_->create_client<std_srvs::srv::Trigger>(
+      format_topic(roboreg_node_name + "/clear_data", roboreg_namespace));
 }
 
 void CollectDataWidget::onCollectData_() {
