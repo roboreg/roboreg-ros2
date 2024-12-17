@@ -5,7 +5,7 @@
   <version>1.0.0</version>
   <description>Roboreg RViZ plugin for calling into services.</description>
   <maintainer email="m.huber_1994@hotmail.de">mhubii</maintainer>
-  <license>CC BY-NC 4.0</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

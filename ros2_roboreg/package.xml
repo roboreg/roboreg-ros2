@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>ROS 2 integration of the mesh registration library</description>
   <maintainer email="martin.huber@kcl.ac.uk">mhubii</maintainer>
-  <license>CC BY-NC 4.0</license>
+  <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
