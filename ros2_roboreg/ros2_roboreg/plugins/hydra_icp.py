@@ -80,7 +80,10 @@ class HydraICP:
                         mask_extract_extended_boundary(
                             mask,
                             dilation_kernel=np.ones(
-                                [params.dilation_kernel_size, params.dilation_kernel_size]
+                                [
+                                    params.dilation_kernel_size,
+                                    params.dilation_kernel_size,
+                                ]
                             ),
                             erosion_kernel=np.ones(
                                 [params.erosion_kernel_size, params.erosion_kernel_size]
