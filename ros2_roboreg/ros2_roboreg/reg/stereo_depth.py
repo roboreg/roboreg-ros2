@@ -55,7 +55,8 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
             pcls = self._process_pcls(
                 pcls=pcls,
                 params=self._ProcessParams(
-                    with_erosion=req.with_erosion,
+                    with_boundary=req.with_boundary,
+                    dilation_kernel_size=req.dilation_kernel_size,
                     erosion_kernel_size=req.erosion_kernel_size,
                 ),
                 masks=self._segmentations,

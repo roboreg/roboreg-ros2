@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from roboreg.differentiable import TorchKinematics, TorchMeshContainer
 from roboreg.hydra_icp import hydra_centroid_alignment, hydra_robust_icp
-from roboreg.util.mask import mask_extract_boundary
+from roboreg.util.mask import mask_extract_extended_boundary
 from roboreg.util.points import (
     clean_xyz,
     compute_vertex_normals,
@@ -18,7 +18,8 @@ from roboreg.util.transform import depth_to_xyz, generate_ht_optical
 class HydraICP:
     @dataclass
     class _ProcessParams:
-        with_erosion: bool = True
+        with_boundary: bool = True
+        dilation_kernel_size: int = 3
         erosion_kernel_size: int = 10
 
     @dataclass
@@ -67,7 +68,7 @@ class HydraICP:
     @staticmethod
     def _process_pcls(
         pcls: List[np.ndarray],
-        params: _RegistrationParams,
+        params: _ProcessParams,
         masks: List[np.ndarray] = None,
         device: torch.device = "cuda",
     ) -> List[torch.Tensor]:
@@ -76,13 +77,16 @@ class HydraICP:
                 clean_xyz(
                     xyz=pcl,
                     mask=(
-                        mask_extract_boundary(
+                        mask_extract_extended_boundary(
                             mask,
+                            dilation_kernel=np.ones(
+                                [params.dilation_kernel_size, params.dilation_kernel_size]
+                            ),
                             erosion_kernel=np.ones(
                                 [params.erosion_kernel_size, params.erosion_kernel_size]
                             ),
                         )
-                        if params.with_erosion
+                        if params.with_boundary
                         else mask
                     ),
                 ),
