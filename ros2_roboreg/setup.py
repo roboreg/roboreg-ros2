@@ -19,7 +19,7 @@ setup(
     maintainer="mhubii",
     maintainer_email="martin.huber@kcl.ac.uk",
     description="ROS 2 integration of the mesh registration library",
-    license="MIT",
+    license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
