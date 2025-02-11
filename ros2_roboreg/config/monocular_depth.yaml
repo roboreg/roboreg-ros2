@@ -50,6 +50,11 @@
       end_link_name: ""
       visual_meshes: False
 
+    renderer:
+      enabled: False
+      color: "b"
+      rate: 10.0
+
     tf_broadcaster:
       parent_frame: world
       child_frame: camera_frame

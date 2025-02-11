@@ -39,6 +39,14 @@ class Server(ABC):
         )
 
     @property
+    def collectables(self) -> OrderedDict[str, Collectable]:
+        return self._collectables
+
+    @property
+    def collectables_history(self) -> List[OrderedDict[str, Collectable]]:
+        return self._collectables_history
+
+    @property
     def node(self) -> Node:
         return self._node
 

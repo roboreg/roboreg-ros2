@@ -1,18 +1,27 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union
 
+import numpy as np
+import torch
 from message_filters import Subscriber
 from rcl_interfaces.msg import Parameter, SetParametersResult
+from roboreg import differentiable as rrd
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
 from ros2_roboreg_idl.srv import RegHydraICP
 
-from ..plugins.hydra_icp import HydraICP
+from ..data.collectables import (
+    CameraInfoCollectable,
+    CompressedImageCollectable,
+    ImageCollectable,
+)
+from ..plugins.hydra_icp import HydraICPPlugin
+from ..plugins.render import RenderPlugin
 from ..util import QoSParams, TopicParams, qos_profile_factory
 from .base import Eye2HandRegistrationBase
 
 
-class StereoDepth(Eye2HandRegistrationBase, HydraICP):
+class StereoDepth(Eye2HandRegistrationBase, HydraICPPlugin):
     @dataclass
     class _ExtraParams:
         left_image_topic: TopicParams
@@ -35,14 +44,16 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
     ) -> RegHydraICP.Response:
         res.success = True
         try:
-            batch_size = len(self._data_server._collectables_history)
-            self._instantiate_meshes(batch_size=batch_size)
+            batch_size = len(self._data_server.collectables_history)
+            self._meshes = self._meshes_factory(
+                batch_size=batch_size, meshes=self._meshes
+            )
             self._segment()
             depths = [
                 collectables["camera.depth"].to_numpy()
-                for collectables in self._data_server._collectables_history
+                for collectables in self._data_server.collectables_history
             ]
-            intrinsics = self._data_server._collectables_history[0][
+            intrinsics = self._data_server.collectables_history[0][
                 "camera.depth.camera_info"
             ].to_numpy()
             pcls = self._depths_to_pcls(
@@ -64,9 +75,9 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
             )
             joint_states = [
                 collectables["joint_states"].to_numpy()
-                for collectables in self._data_server._collectables_history
+                for collectables in self._data_server.collectables_history
             ]
-            self._ht = self._register_hydra_icp(
+            self._extrinsics = self._register_hydra_icp(
                 meshes=self._meshes,
                 kinematics=self._kinematics,
                 joint_states=joint_states,
@@ -154,10 +165,19 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
             qos_profile=qos_profile,
         )
 
+    def _instantiate_render_publisher(self) -> None:
+        self._render_pub = self.create_publisher(
+            Image,
+            self._extra_params.image_topic.name + "/render",
+            qos_profile_factory(
+                QoSParams(reliability="BEST_EFFORT", durability="VOLATILE")
+            ),
+        )
+
     def _segment(self) -> None:
         images = [
             collectables["camera.left.image"].to_numpy()
-            for collectables in self._data_server._collectables_history
+            for collectables in self._data_server.collectables_history
         ]
         self._segmentations = self._segment_impl(images)
 
@@ -319,3 +339,56 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICP):
             else:
                 continue
         return result
+
+    def _on_render_timer(self) -> None:
+        if not self._kinematics:
+            return
+        if not self._render_meshes:
+            return
+        if not self._renderer:
+            return
+
+        # try to get most recent data
+        try:
+            joint_states = self._data_server.collectables["joint_states"].to_numpy()
+            image_collectable: Union[ImageCollectable, CompressedImageCollectable] = (
+                self._data_server.collectables["camera.left.image"]
+            )
+            camera_info_collectable: CameraInfoCollectable = (
+                self._data_server.collectables["camera.left.image.camera_info"]
+            )
+        except KeyError:  # collectables not available
+            return
+        except TypeError:  # NoneType not subscriptable
+            return
+
+        # establish scene
+        self._virtual_camera = rrd.VirtualCamera(
+            (camera_info_collectable.msg.height, camera_info_collectable.msg.width),
+            camera_info_collectable.to_numpy(),
+            self._extrinsics,
+        )
+
+        # render
+        mesh_render = RenderPlugin.render_meshes(
+            meshes=self._render_meshes,
+            kinematics=self._kinematics,
+            camera=self._virtual_camera,
+            renderer=self._renderer,
+            joint_states=torch.tensor(
+                joint_states, dtype=torch.float32, device=self._render_meshes.device
+            ),
+        )
+
+        # overlay render
+        render_overlay = RenderPlugin.overlay_render(
+            image=image_collectable.to_numpy(),
+            render=(mesh_render.squeeze().cpu().numpy() * 255.0).astype(np.uint8),
+            color=self._renderer_params.color,
+        )
+
+        # publish
+        render_overlay_msg = self._cv_bridge.cv2_to_imgmsg(
+            render_overlay, encoding="bgr8", header=image_collectable.msg.header
+        )
+        self._render_pub.publish(render_overlay_msg)

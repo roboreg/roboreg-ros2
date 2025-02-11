@@ -14,8 +14,10 @@ from roboreg.util.points import (
 )
 from roboreg.util.transform import depth_to_xyz, generate_ht_optical
 
+from .kinematics import KinematicsPlugin
 
-class HydraICP:
+
+class HydraICPPlugin:
     @dataclass
     class _ProcessParams:
         with_boundary: bool = True
@@ -115,26 +117,12 @@ class HydraICP:
             )
 
         # process data
-        mesh_vertices = meshes.vertices.clone()
         joint_states = torch.tensor(
             np.array(joint_states), dtype=torch.float32, device=meshes.device
         )
-        ht_lookup = kinematics.mesh_forward_kinematics(joint_states)
-        for link_name, ht in ht_lookup.items():
-            mesh_vertices[
-                :,
-                meshes.lower_vertex_index_lookup[
-                    link_name
-                ] : meshes.upper_vertex_index_lookup[link_name],
-            ] = torch.matmul(
-                mesh_vertices[
-                    :,
-                    meshes.lower_vertex_index_lookup[
-                        link_name
-                    ] : meshes.upper_vertex_index_lookup[link_name],
-                ],
-                ht.transpose(-1, -2),
-            )
+        mesh_vertices = KinematicsPlugin.mesh_forward_kinematics(
+            kinematics=kinematics, meshes=meshes, joint_states=joint_states
+        )
 
         # mesh vertices to list
         mesh_vertices = from_homogeneous(mesh_vertices)
