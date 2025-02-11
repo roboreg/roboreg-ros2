@@ -2,12 +2,15 @@ import copy
 import pathlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
+import cv_bridge
 import numpy as np
 import torch
 from rcl_interfaces.msg import Parameter, SetParametersResult
 from rclpy.node import Node
+from rclpy.publisher import Publisher
+from rclpy.timer import Timer
 from roboreg import differentiable as rrd
 from roboreg.detector import OpenCVDetector
 from roboreg.io import URDFParser
@@ -46,7 +49,13 @@ class Eye2HandRegistrationBase(Node, ABC):
         visual_meshes: bool
 
     @dataclass
-    class TFBroadcasterParams:
+    class _RendererParams:
+        enabled: bool
+        color: str
+        rate: float
+
+    @dataclass
+    class _TFBroadcasterParams:
         parent_frame: str
         child_frame: str
         target_child_frame: str
@@ -69,8 +78,17 @@ class Eye2HandRegistrationBase(Node, ABC):
         self._data_server = Server(node=self)
         self._reload_synced_subscribers()
 
+        # publishers
+        self._render_timer: Timer = None
+        self._render_pub: Publisher = None
+        if self._renderer_params.enabled:
+            self._render_timer = self.create_timer(
+                1.0 / self._renderer_params.rate, self._on_render_timer
+            )
+            self._instantiate_render_publisher()
+
         # results broadcasting
-        self._ht = np.eye(4)
+        self._extrinsics = np.eye(4)
         self._tf_broadcaster = StaticTFBroadcaster(node=self)
         self._tf_broadcast_srv = self.create_service(
             Trigger, "broadcast_transform", self._on_tf_broadcast
@@ -93,11 +111,17 @@ class Eye2HandRegistrationBase(Node, ABC):
         )
         self.get_logger().info("Segmentation model instantiated.")
         self._segmentations = []
+        self._urdf_parser: URDFParser = URDFParser()
         self._kinematics: rrd.TorchKinematics = None
         self._meshes: rrd.TorchMeshContainer = (
             None  # requires configuration based on batch size (number of synced samples)
         )
-        self._urdf_parser: URDFParser = URDFParser()
+        self._cv_bridge = cv_bridge.CvBridge()
+        self._render_meshes: rrd.TorchMeshContainer = None
+        self._renderer: rrd.NVDiffRastRenderer = None
+        self._virtual_camera: rrd.VirtualCamera = None
+        if self._renderer_params.enabled:
+            self._renderer = rrd.NVDiffRastRenderer()
         self._robot_description_sub = None
         self._create_robot_description_sub()
 
@@ -115,7 +139,7 @@ class Eye2HandRegistrationBase(Node, ABC):
     def _on_tf_broadcast(self, _, res: Trigger.Response) -> Trigger.Response:
         try:
             self._tf_broadcaster.broadcast_tf(
-                ht=self._ht,
+                ht=self._extrinsics,
                 parent=self._tf_broadcaster_params.parent_frame,
                 child=self._tf_broadcaster_params.child_frame,
                 target_child=self._tf_broadcaster_params.target_child_frame,
@@ -143,7 +167,7 @@ class Eye2HandRegistrationBase(Node, ABC):
                     res.message = f"Path {path.parent.absolute()} does not exist"
                     self.get_logger().error(res.message)
                     return res
-            np.save(path, self._ht)
+            np.save(path, self._extrinsics)
             res.message = f"Saved transform to {path.absolute()}"
             self.get_logger().info(res.message)
         except Exception as e:
@@ -170,7 +194,7 @@ class Eye2HandRegistrationBase(Node, ABC):
                 res.message = f"Transform has wrong shape: {ht.shape}"
                 self.get_logger().error(res.message)
                 return res
-            self._ht = copy.deepcopy(ht)
+            self._extrinsics = copy.deepcopy(ht)
         except Exception as e:
             res.success = False
             res.message = f"Failed service call with: {e}"
@@ -206,18 +230,30 @@ class Eye2HandRegistrationBase(Node, ABC):
                 end_link_name=self._robot_model_params.end_link_name,
                 device=self._robot_model_params.device,
             )
+            self.get_logger().info("Kinematics instantiated.")
+
+            if self._renderer_params.enabled:
+                self.get_logger().info(
+                    "Instantiating render meshes on robot description."
+                )
+                self._render_meshes = self._meshes_factory(
+                    batch_size=1, meshes=self._render_meshes
+                )
+                self.get_logger().info("Render meshes instantiated.")
         except Exception as e:
             self.get_logger().error(f"Failed to parse URDF: {e}")
 
-    def _instantiate_meshes(self, batch_size: int) -> None:
+    def _meshes_factory(
+        self, batch_size: int, meshes: Optional[rrd.TorchMeshContainer] = None
+    ) -> rrd.TorchMeshContainer:
         if self._kinematics is None:
             raise ValueError("Kinematics not instantiated.")
         if self._urdf_parser is None:
             raise ValueError("URDF parser not instantiated.")
-        if self._meshes is not None:
-            if self._meshes.batch_size == batch_size:
-                return
-        self._meshes = rrd.TorchMeshContainer(
+        if meshes is not None:
+            if meshes.batch_size == batch_size:
+                return meshes
+        return rrd.TorchMeshContainer(
             mesh_paths=self._urdf_parser.ros_package_mesh_paths(
                 root_link_name=self._robot_model_params.root_link_name,
                 end_link_name=self._robot_model_params.end_link_name,
@@ -262,6 +298,14 @@ class Eye2HandRegistrationBase(Node, ABC):
                 ("robot_model.root_link_name", ""),
                 ("robot_model.end_link_name", ""),
                 ("robot_model.visual_meshes", False),
+            ],
+        )
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("renderer.enabled", False),
+                ("renderer.color", "b"),
+                ("renderer.rate", 10.0),
             ],
         )
         self.declare_parameters(
@@ -334,7 +378,19 @@ class Eye2HandRegistrationBase(Node, ABC):
             .get_parameter_value()
             .bool_value,
         )
-        self._tf_broadcaster_params = self.TFBroadcasterParams(
+        self._renderer_params = self._RendererParams(
+            enabled=self.get_parameter("renderer.enabled")
+            .get_parameter_value()
+            .bool_value,
+            color=self.get_parameter("renderer.color")
+            .get_parameter_value()
+            .string_value,
+            rate=self.get_parameter("renderer.rate").get_parameter_value().double_value,
+        )
+        if not torch.cuda.is_available():  # renderer only runs on GPU
+            self.get_logger().info("CUDA not available. Renderer will be disabled.")
+            self._renderer_params.enabled = False
+        self._tf_broadcaster_params = self._TFBroadcasterParams(
             parent_frame=self.get_parameter("tf_broadcaster.parent_frame")
             .get_parameter_value()
             .string_value,
@@ -393,9 +449,17 @@ class Eye2HandRegistrationBase(Node, ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def _instantiate_render_publisher(self) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
     def _on_set_extra_parameters_impl(
         self, paramaters: List[Parameter]
     ) -> SetParametersResult:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _on_render_timer(self) -> None:
         raise NotImplementedError
 
     @abstractmethod

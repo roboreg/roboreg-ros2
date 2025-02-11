@@ -49,13 +49,16 @@ ros2 launch ros2_roboreg reg.launch.py mode:=monocular_depth
 
 Sample configurations are provided in [monocular_depth.yaml](ros2_roboreg/config/monocular_depth.yaml). Please note that compressed image / depth topics are also supported.
 
-#### Subscriped Topics
+#### Subscribed Topics
 * `/camera/image_rect_color`
 * `/camera/image_rect_color/camera_info`
 * `/camera/depth_registered`
 * `/camera/depth_registered/camera_info`
 * `/joint_states`
 * `/robot_description`
+
+#### Published Topics
+* `/camera/image_rect_color/render`
 
 #### Services
 * `collect_data`
