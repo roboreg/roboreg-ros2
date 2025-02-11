@@ -168,7 +168,7 @@ class StereoDepth(Eye2HandRegistrationBase, HydraICPPlugin):
     def _instantiate_render_publisher(self) -> None:
         self._render_pub = self.create_publisher(
             Image,
-            self._extra_params.image_topic.name + "/render",
+            self._extra_params.left_image_topic.name + "/render",
             qos_profile_factory(
                 QoSParams(reliability="BEST_EFFORT", durability="VOLATILE")
             ),
