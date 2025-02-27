@@ -27,7 +27,9 @@ jobs:
           target-ros2-distro: rolling
           colcon-defaults: |
             {
-              "test": {
-                "pytest-args": "-m not linter",
-              }
+                "test": {
+                    "pytest-args": [
+                        "-m not linter"
+                    ]
+                }
             }
