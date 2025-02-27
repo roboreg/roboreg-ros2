@@ -25,4 +25,9 @@ jobs:
         with:
           import-token: ${{ secrets.GITHUB_TOKEN }}
           target-ros2-distro: rolling
-          colcon-extra-args: --pytest-args "-m not linter" # skip tests due to Black formatting for now
+          colcon-defaults: |
+            {
+              "test": {
+                "pytest-args": "-m not linter",
+              }
+            }
