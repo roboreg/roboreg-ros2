@@ -26,7 +26,7 @@ pip3 install roboreg==0.4.5
 
 ```shell
 mkdir -p lbr-stack/src && cd lbr-stack
-git clone https://github.com/lbr-stack/ros2_roboreg.git src/ros2_roboreg
+git clone https://github.com/lbr-stack/ros2_roboreg.git -b rolling src/ros2_roboreg
 rosdep install --from-paths src -r -i -y
 colcon build --symlink-install
 ```
