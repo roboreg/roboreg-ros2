@@ -1,6 +1,7 @@
 # ROS 2 Roboreg
 [![License: Apache License 2.0](https://img.shields.io/github/license/lbr-stack/ros2_roboreg)](https://github.com/lbr-stack/ros2_roboreg?tab=Apache-2.0-1-ov-file)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![ROS 2 CI](https://github.com/lbr-stack/ros2_roboreg/actions/workflows/ros2_ci.yaml/badge.svg?branch=rolling)](https://github.com/lbr-stack/ros2_roboreg/actions/workflows/ros2_ci.yaml)
 
 ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
 
