@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -41,6 +41,19 @@ def generate_launch_description() -> LaunchDescription:
             "use_sim_time",
             default_value="False",
             description="Use simulation (Gazebo) time.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "max_jobs",
+            default_value="2",
+            description="Maximum number of concurrent jobs for nvdiffrast. Limits compilation RAM usage on first run. Relevant for rendering and differentiable rendering.",
+        )
+    )
+    ld.add_action(
+        SetEnvironmentVariable(
+            name="MAX_JOBS",
+            value=LaunchConfiguration("max_jobs"),
         )
     )
     ld.add_action(
