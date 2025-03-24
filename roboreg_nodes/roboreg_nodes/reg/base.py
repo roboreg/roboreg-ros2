@@ -46,7 +46,7 @@ class Eye2HandRegistrationBase(Node, ABC):
         device: str
         root_link_name: str
         end_link_name: str
-        visual_meshes: bool
+        collision_meshes: bool
 
     @dataclass
     class _RendererParams:
@@ -207,7 +207,7 @@ class Eye2HandRegistrationBase(Node, ABC):
             if self._robot_model_params.root_link_name == "":
                 self._robot_model_params.root_link_name = (
                     self._urdf_parser.link_names_with_meshes(
-                        self._robot_model_params.visual_meshes
+                        collision=self._robot_model_params.collision_meshes
                     )[0]
                 )
                 self.get_logger().info(
@@ -216,7 +216,7 @@ class Eye2HandRegistrationBase(Node, ABC):
             if self._robot_model_params.end_link_name == "":
                 self._robot_model_params.end_link_name = (
                     self._urdf_parser.link_names_with_meshes(
-                        self._robot_model_params.visual_meshes
+                        collision=self._robot_model_params.collision_meshes
                     )[-1]
                 )
                 self.get_logger().info(
@@ -257,7 +257,7 @@ class Eye2HandRegistrationBase(Node, ABC):
             mesh_paths=self._urdf_parser.ros_package_mesh_paths(
                 root_link_name=self._robot_model_params.root_link_name,
                 end_link_name=self._robot_model_params.end_link_name,
-                visual=self._robot_model_params.visual_meshes,
+                collision=self._robot_model_params.collision_meshes,
             ),
             batch_size=batch_size,
             device=self._robot_model_params.device,
@@ -297,7 +297,7 @@ class Eye2HandRegistrationBase(Node, ABC):
                 ("robot_model.device", "cuda" if torch.cuda.is_available() else "cpu"),
                 ("robot_model.root_link_name", ""),
                 ("robot_model.end_link_name", ""),
-                ("robot_model.visual_meshes", False),
+                ("robot_model.collision_meshes", False),
             ],
         )
         self.declare_parameters(
@@ -374,7 +374,7 @@ class Eye2HandRegistrationBase(Node, ABC):
             end_link_name=self.get_parameter("robot_model.end_link_name")
             .get_parameter_value()
             .string_value,
-            visual_meshes=self.get_parameter("robot_model.visual_meshes")
+            collision_meshes=self.get_parameter("robot_model.collision_meshes")
             .get_parameter_value()
             .bool_value,
         )

@@ -58,7 +58,7 @@
       device: cuda
       root_link_name: ""
       end_link_name: ""
-      visual_meshes: False
+      collision_meshes: False
 
     renderer:
       enabled: False
