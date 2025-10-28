@@ -13,13 +13,13 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
-- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.4.5`:
+- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.4.6`:
 
 > [!NOTE]
 > When using differentiable rendering, CUDA Toolkit is required at runtime, refer [CUDA Toolkit Install Instructions](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/).
 
 ```shell
-pip3 install roboreg==0.4.5
+pip3 install roboreg==0.4.6
 ```
 
 - Build this `roboreg` ROS 2 integration
