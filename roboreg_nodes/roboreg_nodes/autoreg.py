@@ -2,8 +2,6 @@
 ### roboreg_nodes services
 ### ros2_control joint trajectory controller action server
 
-import argparse
-import csv
 import glob
 import os
 
@@ -18,8 +16,11 @@ from roboreg_idl.srv import CollectSample
 
 
 class AutoReg(Node):
-    def __init__(self, joint_states_path: str) -> None:
+    def __init__(self) -> None:
         super().__init__("autoreg")
+
+        self.declare_parameter("path", "")
+        joint_states_path = self.get_parameter("path").get_parameter_value().string_value
 
         self.collect_sample_client_ = self.create_client(
             CollectSample, "collect_sample"
@@ -77,18 +78,16 @@ class AutoReg(Node):
         goal_msg.trajectory.joint_names = ["A1", "A2", "A3", "A4", "A5", "A6", "A7"]
         point = JointTrajectoryPoint()
         point.positions = joint_state.tolist()
-        point.time_from_start = self.get_clock().now().to_msg()
+        point.time_from_start.sec = 5
         goal_msg.trajectory.points.append(point)
         self.joint_trajectory_action_client_.wait_for_server()
         self.joint_trajectory_action_client_.send_goal(goal_msg)
+        return True
 
 
 def main() -> None:
     rclpy.init(args=None)
-    # parser = argparse.ArgumentParser()
-    # args, unkown_args = parser.parse_known_args()
-    path = "/media/martin/Samsung_T5/24_04_22_faros_integration/24_04_29_pig_specimen/calib"
-    autoreg = AutoReg(joint_states_path=path)
+    autoreg = AutoReg()
     autoreg.run()
     rclpy.shutdown()
 
