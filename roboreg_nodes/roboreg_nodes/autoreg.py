@@ -81,7 +81,13 @@ class AutoReg(Node):
         point.time_from_start.sec = 5
         goal_msg.trajectory.points.append(point)
         self.joint_trajectory_action_client_.wait_for_server()
-        self.joint_trajectory_action_client_.send_goal(goal_msg)
+        goal_future = self.joint_trajectory_action_client_.send_goal_async(goal_msg)
+        rclpy.spin_until_future_complete(self, goal_future)
+        goal_handle = goal_future.result()
+        if not goal_handle.accepted:
+            return False
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
         return True
 
 
