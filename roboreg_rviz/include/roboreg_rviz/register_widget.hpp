@@ -9,7 +9,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
-#include "roboreg_idl/srv/reg_hydra_icp.hpp"
+#include "roboreg_idl/srv/reg_hydra_robust_icp.hpp"
 #include "roboreg_rviz/formatting.hpp"
 
 namespace roboreg_rviz {
@@ -26,7 +26,7 @@ protected:
 
 protected:
   rclcpp::Node::SharedPtr node_ptr_;
-  rclcpp::Client<roboreg_idl::srv::RegHydraICP>::SharedPtr register_client_ptr_;
+  rclcpp::Client<roboreg_idl::srv::RegHydraRobustICP>::SharedPtr register_client_ptr_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr broadcast_tf_client_ptr_;
 
   QPushButton *register_button_;

@@ -1,27 +1,25 @@
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List
 
 import numpy as np
-import torch
 from message_filters import Subscriber
 from rcl_interfaces.msg import Parameter, SetParametersResult
-from roboreg import differentiable as rrd
+from roboreg.registration.point_cloud.config import (
+    DepthToPointCloudConfig,
+    HydraConfig,
+    HydraRobustICPConfig,
+)
+from roboreg.registration.point_cloud.request import HydraObservations, HydraRequest
+from roboreg.registration.point_cloud.solver import HydraRobustICP
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
-from roboreg_idl.srv import RegHydraICP
+from roboreg_idl.srv import RegHydraRobustICP
 
-from ..data.collectables import (
-    CameraInfoCollectable,
-    CompressedImageCollectable,
-    ImageCollectable,
-)
-from ..plugins.hydra_icp import HydraICPPlugin
-from ..plugins.render import RenderPlugin
 from ..util import QoSParams, TopicParams, qos_profile_factory
 from .base import Eye2HandRegistrationBase
 
 
-class MonocularDepth(Eye2HandRegistrationBase, HydraICPPlugin):
+class MonocularDepth(Eye2HandRegistrationBase):
     @dataclass
     class _ExtraParams:
         image_topic: TopicParams
@@ -34,18 +32,14 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICPPlugin):
         super().__init__(node_name)
 
         self._hydra_icp_srv = self.create_service(
-            RegHydraICP, "register/hydra_icp", self._on_hydra_icp
+            RegHydraRobustICP, "register/hydra_robust_icp", self._on_hydra_icp
         )
 
     def _on_hydra_icp(
-        self, req: RegHydraICP.Request, res: RegHydraICP.Response
-    ) -> RegHydraICP.Response:
+        self, req: RegHydraRobustICP.Request, res: RegHydraRobustICP.Response
+    ) -> RegHydraRobustICP.Response:
         res.success = True
         try:
-            batch_size = len(self._data_server.collectables_history)
-            self._meshes = self._meshes_factory(
-                batch_size=batch_size, meshes=self._meshes
-            )
             self._segment()
             depths = [
                 collectables["camera.depth"].to_numpy()
@@ -54,41 +48,44 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICPPlugin):
             intrinsics = self._data_server.collectables_history[0][
                 "camera.depth.camera_info"
             ].to_numpy()
-            pcls = self._depths_to_pcls(
-                depths=depths,
-                intrinsics=intrinsics,
-                z_min=self._filter_params.min_depth,
-                z_max=self._filter_params.max_depth,
-                device=self._meshes.device,
-            )
-            pcls = self._process_pcls(
-                pcls=pcls,
-                params=self._ProcessParams(
-                    with_boundary=req.with_boundary,
-                    dilation_kernel_size=req.dilation_kernel_size,
-                    erosion_kernel_size=req.erosion_kernel_size,
-                ),
-                masks=self._segmentations,
-                device=self._meshes.device,
-            )
             joint_states = [
                 collectables["joint_states"].to_numpy()
                 for collectables in self._data_server.collectables_history
             ]
-            self._extrinsics = self._register_hydra_icp(
-                meshes=self._meshes,
-                kinematics=self._kinematics,
-                joint_states=joint_states,
-                pcls=pcls,
-                params=self._RegistrationParams(
-                    number_of_points=req.number_of_points,
-                    max_distance=req.max_distance,
-                    outer_max_iter=req.outer_max_iter,
-                    inner_max_iter=req.inner_max_iter,
-                    rmse_change=req.rmse_change,
+            registration = HydraRobustICP(
+                config=HydraRobustICPConfig(
+                    hydra=HydraConfig(
+                        reference_points_per_mesh=req.reference_points_per_mesh,
+                        depth_to_point_cloud=DepthToPointCloudConfig(
+                            z_min=req.z_min,
+                            z_max=req.z_max,
+                            use_mask_boundary=req.use_mask_boundary,
+                            dilation_kernel_size=req.dilation_kernel_size,
+                            erosion_kernel_size=req.erosion_kernel_size,
+                        ),
+                        max_correspondence_distance=req.max_correspondence_distance,
+                        rmse_change_tolerance=req.rmse_change_tolerance,
+                    ),
+                    max_outer_iterations=req.max_outer_iterations,
+                    max_inner_iterations=req.max_inner_iterations,
                 ),
             )
-            res.message = "Registration successful"
+            result = registration(
+                request=HydraRequest(
+                    intrinsics=intrinsics,
+                    robot_data=self._robot_data,
+                    observations=HydraObservations(
+                        joint_states=joint_states,
+                        masks=self._segmentations,
+                        depths=depths,
+                    ),
+                )
+            )
+            extrinsics = result.extrinsics.cpu().numpy()
+            if np.isnan(extrinsics).any():
+                raise ValueError("Registration failed: extrinsics contain NaN values.")
+            self._extrinsics = extrinsics
+            res.message = f"Optimization terminated after {result.iterations} iterations with status '{result.termination_reason}'."
         except Exception as e:
             res.success = False
             res.message = str(e)
@@ -141,15 +138,6 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICPPlugin):
             JointState,
             self._extra_params.joint_state_topic.name,
             qos_profile=qos_profile,
-        )
-
-    def _instantiate_render_publisher(self) -> None:
-        self._render_pub = self.create_publisher(
-            Image,
-            self._extra_params.image_topic.name + "/render",
-            qos_profile_factory(
-                QoSParams(reliability="BEST_EFFORT", durability="VOLATILE")
-            ),
         )
 
     def _segment(self) -> None:
@@ -278,56 +266,3 @@ class MonocularDepth(Eye2HandRegistrationBase, HydraICPPlugin):
             else:
                 continue
         return result
-
-    def _on_render_timer(self) -> None:
-        if not self._kinematics:
-            return
-        if not self._render_meshes:
-            return
-        if not self._renderer:
-            return
-
-        # try to get most recent data
-        try:
-            joint_states = self._data_server.collectables["joint_states"].to_numpy()
-            image_collectable: Union[ImageCollectable, CompressedImageCollectable] = (
-                self._data_server.collectables["camera.image"]
-            )
-            camera_info_collectable: CameraInfoCollectable = (
-                self._data_server.collectables["camera.image.camera_info"]
-            )
-        except KeyError:  # collectables not available
-            return
-        except TypeError:  # NoneType not subscriptable
-            return
-
-        # establish scene
-        self._virtual_camera = rrd.VirtualCamera(
-            (camera_info_collectable.msg.height, camera_info_collectable.msg.width),
-            camera_info_collectable.to_numpy(),
-            self._extrinsics,
-        )
-
-        # render
-        mesh_render = RenderPlugin.render_meshes(
-            meshes=self._render_meshes,
-            kinematics=self._kinematics,
-            camera=self._virtual_camera,
-            renderer=self._renderer,
-            joint_states=torch.tensor(
-                joint_states, dtype=torch.float32, device=self._render_meshes.device
-            ),
-        )
-
-        # overlay render
-        render_overlay = RenderPlugin.overlay_render(
-            image=image_collectable.to_numpy(),
-            render=(mesh_render.squeeze().cpu().numpy() * 255.0).astype(np.uint8),
-            color=self._renderer_params.color,
-        )
-
-        # publish
-        render_overlay_msg = self._cv_bridge.cv2_to_imgmsg(
-            render_overlay, encoding="bgr8", header=image_collectable.msg.header
-        )
-        self._render_pub.publish(render_overlay_msg)
