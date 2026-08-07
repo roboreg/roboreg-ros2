@@ -5,14 +5,14 @@ import numpy as np
 from sensor_msgs.msg import CompressedImage
 
 
-def decode_depth(msg: CompressedImage) -> np.ndarray[np.uint16]:
+def decode_depth(msg: CompressedImage) -> np.ndarray[np.float32]:
     r"""Decodes a compressed depth image message.
 
     Args:
         msg [CompressedImage]: Compressed depth image message.
 
     Returns:
-        np.ndarray[np.uint16]: Depth image in millimeters.
+        np.ndarray[np.float32]: Depth image in meters.
     """
     depth_fmt, compr_type = msg.format.split(";")
     # Remove whitespace
@@ -42,7 +42,8 @@ def decode_depth(msg: CompressedImage) -> np.ndarray[np.uint16]:
 
     if depth_fmt == "16UC1":
         # Convert millimeters to meters as float32
-        depth_img_mm = depth_img_raw
+        depth_img_meters = depth_img_raw.astype(np.float32) / 1000.0
+        depth_img_meters[depth_img_raw == 0] = 0
     elif depth_fmt == "32FC1":
         # Parse quantization parameters from header
         raw_header = msg.data[:depth_header_size]
@@ -55,8 +56,7 @@ def decode_depth(msg: CompressedImage) -> np.ndarray[np.uint16]:
 
         # Set invalid values (raw depth == 0) to 0 in the final output
         depth_img_meters[depth_img_raw == 0] = 0
-        depth_img_mm = (depth_img_meters * 1000.0).astype(np.uint16)
     else:
         raise Exception(f"Unsupported depth format {depth_fmt}.")
 
-    return depth_img_mm
+    return depth_img_meters.astype(np.float32)
