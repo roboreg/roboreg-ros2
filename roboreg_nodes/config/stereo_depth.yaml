@@ -54,16 +54,11 @@
       model_id: facebook/sam2-hiera-large
       pth: 0.5
 
-    robot_model:
-      device: cuda
+    robot_data:
       root_link_name: ""
       end_link_name: ""
       collision_meshes: False
-
-    renderer:
-      enabled: False
-      color: "b"
-      rate: 10.0
+      target_reduction: 0.0
 
     tf_broadcaster:
       parent_frame: world

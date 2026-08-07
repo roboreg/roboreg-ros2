@@ -44,19 +44,6 @@ def generate_launch_description() -> LaunchDescription:
         )
     )
     ld.add_action(
-        DeclareLaunchArgument(
-            "max_jobs",
-            default_value="2",
-            description="Maximum number of concurrent jobs for nvdiffrast. Limits compilation RAM usage on first run. Relevant for rendering and differentiable rendering.",
-        )
-    )
-    ld.add_action(
-        SetEnvironmentVariable(
-            name="MAX_JOBS",
-            value=LaunchConfiguration("max_jobs"),
-        )
-    )
-    ld.add_action(
         Node(
             package="roboreg_nodes",
             executable=LaunchConfiguration("mode"),

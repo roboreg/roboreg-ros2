@@ -20,7 +20,9 @@ class AutoReg(Node):
         super().__init__("autoreg")
 
         self.declare_parameter("path", "")
-        joint_states_path = self.get_parameter("path").get_parameter_value().string_value
+        joint_states_path = (
+            self.get_parameter("path").get_parameter_value().string_value
+        )
 
         self.collect_sample_client_ = self.create_client(
             CollectSample, "collect_sample"

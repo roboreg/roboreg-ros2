@@ -25,8 +25,8 @@ void RegisterWidget::setupClient(const std::string &roboreg_namespace) {
   if (register_client_ptr_) {
     register_client_ptr_.reset();
   }
-  register_client_ptr_ = node_ptr_->create_client<roboreg_idl::srv::RegHydraICP>(
-      format_topic("register/hydra_icp", roboreg_namespace));
+  register_client_ptr_ = node_ptr_->create_client<roboreg_idl::srv::RegHydraRobustICP>(
+      format_topic("register/hydra_robust_icp", roboreg_namespace));
   if (broadcast_tf_client_ptr_) {
     broadcast_tf_client_ptr_.reset();
   }
@@ -44,9 +44,9 @@ void RegisterWidget::onRegister_() {
                  register_client_ptr_->get_service_name());
     return;
   }
-  auto request = std::make_shared<roboreg_idl::srv::RegHydraICP::Request>();
+  auto request = std::make_shared<roboreg_idl::srv::RegHydraRobustICP::Request>();
   auto future = register_client_ptr_->async_send_request(
-      request, [this](rclcpp::Client<roboreg_idl::srv::RegHydraICP>::SharedFuture result) {
+      request, [this](rclcpp::Client<roboreg_idl::srv::RegHydraRobustICP>::SharedFuture result) {
         if (result.get()->success) {
           RCLCPP_INFO(node_ptr_->get_logger(), "Registered");
         } else {

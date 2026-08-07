@@ -13,13 +13,10 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
-- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.4.6`:
-
-> [!NOTE]
-> When using differentiable rendering, CUDA Toolkit is required at runtime, refer [CUDA Toolkit Install Instructions](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/).
+- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.6.4`:
 
 ```shell
-pip3 install roboreg==0.4.6
+pip3 install roboreg==0.6.4
 ```
 
 - Build this `roboreg` ROS 2 integration
@@ -59,12 +56,12 @@ Sample configurations are provided in [monocular_depth.yaml](roboreg_nodes/confi
 * `/robot_description`
 
 #### Published Topics
-* `/camera/image_rect_color/render`
+* `/tf_static`
 
 #### Services
 * `collect_data`
 * `clear_data`
-* `register/hydra_icp`
+* `register/hydra_robust_icp`
 * `export/data`
 * `export/transform`
 * `import/transform`

@@ -1,8 +1,0 @@
-string optimizer "SGD"
-float32 lr 0.001
-int16 epochs 100
-int16 step_size 100
-float32 gamma 1.0
----
-bool success
-string message

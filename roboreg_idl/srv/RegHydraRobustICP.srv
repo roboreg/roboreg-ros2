@@ -1,0 +1,13 @@
+int16 reference_points_per_mesh 5000
+float32 z_min 0.01
+float32 z_max 4.0
+bool use_mask_boundary true
+int16 dilation_kernel_size 3
+int16 erosion_kernel_size 10
+float32 max_correspondence_distance 0.1
+float32 rmse_change_tolerance 1.0e-6
+int16 max_outer_iterations 50
+int16 max_inner_iterations 10
+---
+bool success
+string message
