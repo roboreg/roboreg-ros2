@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>roboreg_nodes</name>
+  <name>roboreg_base</name>
   <version>0.2.0</version>
   <description>ROS 2 integration of the mesh registration library</description>
-  <maintainer email="martin.huber@kcl.ac.uk">mhubii</maintainer>
+  <maintainer email="m.huber_1994@hotmail.de">mhubii</maintainer>
   <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>

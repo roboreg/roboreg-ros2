@@ -25,7 +25,7 @@ def generate_launch_description() -> LaunchDescription:
     ld.add_action(
         DeclareLaunchArgument(
             "cfg_pkg",
-            default_value="roboreg_nodes",
+            default_value="roboreg_local",
             description="Package name containing the configuration file.",
         )
     )
@@ -45,7 +45,7 @@ def generate_launch_description() -> LaunchDescription:
     )
     ld.add_action(
         Node(
-            package="roboreg_nodes",
+            package="roboreg_local",
             executable=LaunchConfiguration("mode"),
             name="roboreg",
             output="screen",

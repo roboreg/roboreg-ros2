@@ -9,7 +9,6 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
 * [Installation](#installation)
 * [Nodes](#nodes)
     * [Monocular Depth](#monocular-depth)
-    * [Autoreg](#autoreg)
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
@@ -30,7 +29,6 @@ colcon build --symlink-install
 
 ## Nodes
 - [Monocular Depth](#monocular-depth)
-- [Autoreg](#autoreg)
 - [Static TF Broadcaster](#static-tf-broadcaster)
 
 ### Monocular Depth
@@ -42,10 +40,11 @@ This node performs eye-to-hand calibration from RGB images and corresponding dep
 To run, simply do
 
 ```shell
-ros2 launch roboreg_nodes reg.launch.py mode:=monocular_depth
+ros2 launch roboreg_local server.launch.py \
+    mode:=monocular_depth
 ```
 
-Sample configurations are provided in [monocular_depth.yaml](roboreg_nodes/config/monocular_depth.yaml). Please note that compressed image / depth topics are also supported.
+Sample configurations are provided in [monocular_depth.yaml](roboreg_local/config/monocular_depth.yaml). Please note that compressed image / depth topics are also supported.
 
 #### Subscribed Topics
 * `/camera/image_rect_color`
@@ -67,18 +66,11 @@ Sample configurations are provided in [monocular_depth.yaml](roboreg_nodes/confi
 * `import/transform`
 * `broadcast_transform`
 
-### Autoreg
-Utility node for executing trajectory via `ros2_control` and collecting samples via `roboreg_nodes`.
-
-```shell
-ros2 run roboreg_nodes autoreg --help
-```
-
 ### Static TF Broadcaster
-Utility node for publishing static transform as acquired through `roboreg_nodes`.
+Utility node for publishing static transform as acquired through `roboreg_local` / `roboreg_cloud`.
 
 ```shell
-ros2 run roboreg_nodes broadcaster --help
+ros2 run roboreg_base broadcaster --help
 ```
 
 ## Acknowledgements

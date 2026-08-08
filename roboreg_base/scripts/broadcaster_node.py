@@ -4,7 +4,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 
-from roboreg_nodes.broadcaster import StaticTFBroadcaster
+from roboreg_base.broadcaster import StaticTFBroadcaster
 
 
 def main():
@@ -60,8 +60,9 @@ def main():
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-
-    rclpy.shutdown()
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

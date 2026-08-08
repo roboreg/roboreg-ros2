@@ -18,9 +18,9 @@ from std_srvs.srv import Trigger
 
 from roboreg_idl.srv import Export, Import
 
-from ..broadcaster import StaticTFBroadcaster
-from ..data.server import Server
-from ..util import QoSParams, TopicParams, qos_profile_factory
+from .broadcaster import StaticTFBroadcaster
+from .data.server import Server
+from .util import QoSParams, TopicParams, qos_profile_factory
 
 
 class Eye2HandRegistrationBase(Node, ABC):

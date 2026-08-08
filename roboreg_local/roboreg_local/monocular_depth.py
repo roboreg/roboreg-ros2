@@ -13,10 +13,9 @@ from roboreg.registration.point_cloud.request import HydraObservations, HydraReq
 from roboreg.registration.point_cloud.solver import HydraRobustICP
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
+from roboreg_base.base import Eye2HandRegistrationBase
+from roboreg_base.util import QoSParams, TopicParams, qos_profile_factory
 from roboreg_idl.srv import RegHydraRobustICP
-
-from ..util import QoSParams, TopicParams, qos_profile_factory
-from .base import Eye2HandRegistrationBase
 
 
 class MonocularDepth(Eye2HandRegistrationBase):
