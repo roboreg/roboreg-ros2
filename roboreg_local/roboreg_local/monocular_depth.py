@@ -13,12 +13,14 @@ from roboreg.registration.point_cloud.request import HydraObservations, HydraReq
 from roboreg.registration.point_cloud.solver import HydraRobustICP
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, JointState
 
-from roboreg_base.base import Eye2HandRegistrationBase
+from roboreg_base.base import RoboregNode
 from roboreg_base.util import QoSParams, TopicParams, qos_profile_factory
 from roboreg_idl.srv import RegHydraRobustICP
 
+from .interactive_segmentation import InteractiveSegmentation
 
-class MonocularDepth(Eye2HandRegistrationBase):
+
+class MonocularDepth(RoboregNode):
     @dataclass
     class _ExtraParams:
         image_topic: TopicParams
@@ -33,13 +35,18 @@ class MonocularDepth(Eye2HandRegistrationBase):
         self._hydra_icp_srv = self.create_service(
             RegHydraRobustICP, "register/hydra_robust_icp", self._on_hydra_icp
         )
+        self._interactive_segmentation = InteractiveSegmentation(self)
 
     def _on_hydra_icp(
         self, req: RegHydraRobustICP.Request, res: RegHydraRobustICP.Response
     ) -> RegHydraRobustICP.Response:
         res.success = True
         try:
-            self._segment()
+            images = [
+                collectables["camera.image"].to_numpy()
+                for collectables in self._data_server.collectables_history
+            ]
+            segmentations = self._interactive_segmentation.segment(images)
             depths = [
                 collectables["camera.depth"].to_numpy()
                 for collectables in self._data_server.collectables_history
@@ -75,7 +82,7 @@ class MonocularDepth(Eye2HandRegistrationBase):
                     robot_data=self._robot_data,
                     observations=HydraObservations(
                         joint_states=joint_states,
-                        masks=self._segmentations,
+                        masks=segmentations,
                         depths=depths,
                     ),
                 )
@@ -138,13 +145,6 @@ class MonocularDepth(Eye2HandRegistrationBase):
             self._extra_params.joint_state_topic.name,
             qos_profile=qos_profile,
         )
-
-    def _segment(self) -> None:
-        images = [
-            collectables["camera.image"].to_numpy()
-            for collectables in self._data_server.collectables_history
-        ]
-        self._segmentations = self._segment_impl(images)
 
     def _declare_extra_parameters(self):
         self.declare_parameters(

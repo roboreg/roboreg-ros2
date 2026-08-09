@@ -6,13 +6,10 @@ from typing import List
 
 import cv_bridge
 import numpy as np
-import torch
 from rcl_interfaces.msg import Parameter, SetParametersResult
 from rclpy.node import Node
 from roboreg.core.robot import RobotData
-from roboreg.detector import OpenCVDetector
 from roboreg.io import URDFParser, apply_mesh_origins, load_meshes, simplify_meshes
-from roboreg.segmentor import Sam2Segmentor
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
@@ -23,21 +20,10 @@ from .data.server import Server
 from .util import QoSParams, TopicParams, qos_profile_factory
 
 
-class Eye2HandRegistrationBase(Node, ABC):
+class RoboregNode(Node, ABC):
     @dataclass
     class _FilterParams:
         sync_accuracy: float
-        min_depth: float
-        max_depth: float
-
-    @dataclass
-    class _SegmentationParams:
-        device: str
-        n_positive_samples: int
-        n_negative_samples: int
-        model_id: str
-        pth: float
-        window_name: str
 
     @dataclass
     class _RobotDataParams:
@@ -84,16 +70,6 @@ class Eye2HandRegistrationBase(Node, ABC):
         )
 
         # common registration utilities
-        self.get_logger().info(
-            "Instantiating segmentation model. This may take a while..."
-        )
-        self._segmentor = Sam2Segmentor(
-            model_id=self._segmentation_params.model_id,
-            pth=self._segmentation_params.pth,
-            device=self._segmentation_params.device,
-        )
-        self.get_logger().info("Segmentation model instantiated.")
-        self._segmentations = []
         self._robot_data: RobotData = None
         self._cv_bridge = cv_bridge.CvBridge()
         self._robot_description_sub = None
@@ -242,19 +218,6 @@ class Eye2HandRegistrationBase(Node, ABC):
             namespace="",
             parameters=[
                 ("filters.sync_accuracy", 1.0),
-                ("filters.min_depth", 0.01),
-                ("filters.max_depth", 4.0),
-            ],
-        )
-        self.declare_parameters(
-            namespace="",
-            parameters=[
-                ("segmentation.device", "cuda" if torch.cuda.is_available() else "cpu"),
-                ("segmentation.n_positive_samples", 5),
-                ("segmentation.n_negative_samples", 5),
-                ("segmentation.model_id", "facebook/sam2-hiera-large"),
-                ("segmentation.pth", 0.5),
-                ("segmentation.window_name", "segmentation"),
             ],
         )
         self.declare_parameters(
@@ -295,32 +258,6 @@ class Eye2HandRegistrationBase(Node, ABC):
             sync_accuracy=self.get_parameter("filters.sync_accuracy")
             .get_parameter_value()
             .double_value,
-            min_depth=self.get_parameter("filters.min_depth")
-            .get_parameter_value()
-            .double_value,
-            max_depth=self.get_parameter("filters.max_depth")
-            .get_parameter_value()
-            .double_value,
-        )
-        self._segmentation_params = self._SegmentationParams(
-            device=self.get_parameter("segmentation.device")
-            .get_parameter_value()
-            .string_value,
-            n_positive_samples=self.get_parameter("segmentation.n_positive_samples")
-            .get_parameter_value()
-            .integer_value,
-            n_negative_samples=self.get_parameter("segmentation.n_negative_samples")
-            .get_parameter_value()
-            .integer_value,
-            model_id=self.get_parameter("segmentation.model_id")
-            .get_parameter_value()
-            .string_value,
-            pth=self.get_parameter("segmentation.pth")
-            .get_parameter_value()
-            .double_value,
-            window_name=self.get_parameter("segmentation.window_name")
-            .get_parameter_value()
-            .string_value,
         )
         self._robot_data_params = self._RobotDataParams(
             root_link_name=self.get_parameter("robot_data.root_link_name")
@@ -370,21 +307,6 @@ class Eye2HandRegistrationBase(Node, ABC):
         result = self._on_set_extra_parameters_impl(paramaters)
         return result
 
-    def _segment_impl(self, images: List[np.ndarray]) -> List[np.ndarray]:
-        segmentations = []
-        for image in images:
-            detector = OpenCVDetector(
-                n_positive_samples=self._segmentation_params.n_positive_samples,
-                n_negative_samples=self._segmentation_params.n_negative_samples,
-                window_name=self._segmentation_params.window_name,
-            )
-            samples, labels = detector.detect(image)
-            probability = self._segmentor(image, np.array(samples), np.array(labels))
-            segmentations.append(
-                np.where(probability > self._segmentor.pth, 255, 0).astype(np.uint8)
-            )
-        return segmentations
-
     def _reload_synced_subscribers(self) -> None:
         self._data_server.subscribers = {}
         self._register_synced_subscribers()
@@ -398,10 +320,6 @@ class Eye2HandRegistrationBase(Node, ABC):
     def _on_set_extra_parameters_impl(
         self, paramaters: List[Parameter]
     ) -> SetParametersResult:
-        raise NotImplementedError
-
-    @abstractmethod
-    def _segment(self) -> None:
         raise NotImplementedError
 
     @abstractmethod
