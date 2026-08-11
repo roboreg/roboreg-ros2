@@ -3,9 +3,13 @@
 <package format="3">
   <name>roboreg_local</name>
   <version>0.2.0</version>
-  <description>TODO: Package description</description>
+  <description>Implements roboreg_base using the roboreg Python library locally.</description>
   <maintainer email="m.huber_1994@hotmail.de">mhubii</maintainer>
   <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>roboreg_base</exec_depend>
+  <exec_depend>roboreg_idl</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -3,14 +3,9 @@
 <package format="3">
   <name>roboreg_base</name>
   <version>0.2.0</version>
-  <description>ROS 2 integration of the mesh registration library</description>
+  <description>Data collection utilities for the ROS 2 roboreg integration..</description>
   <maintainer email="m.huber_1994@hotmail.de">mhubii</maintainer>
   <license>Apache-2.0</license>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
 
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>message_filters</exec_depend>
@@ -22,6 +17,10 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
 
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

@@ -1,12 +1,12 @@
 import rclpy
 
-from roboreg_local.monocular_depth import MonocularDepth
+from roboreg_local.monocular_depth_node import MonocularDepthNode
 
 
 def main():
     rclpy.init(args=None)
     try:
-        reg = MonocularDepth(node_name="roboreg")
+        reg = MonocularDepthNode(node_name="roboreg")
         rclpy.spin(reg)
     except KeyboardInterrupt:
         pass

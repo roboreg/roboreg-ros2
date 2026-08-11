@@ -46,7 +46,6 @@
       root_link_name: ""
       end_link_name: ""
       collision_meshes: False
-      target_reduction: 0.0
 
     tf_broadcaster:
       parent_frame: world

@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="mhubii",
     maintainer_email="m.huber_1994@hotmail.de",
-    description="ROS 2 integration of the mesh registration library",
+    description="Data collection utilities for the ROS 2 roboreg integration..",
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={

@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 from rclpy.qos import (
     DurabilityPolicy,
     QoSProfile,
@@ -7,17 +5,7 @@ from rclpy.qos import (
     qos_profile_system_default,
 )
 
-
-@dataclass
-class QoSParams:
-    reliability: str
-    durability: str
-
-
-@dataclass
-class TopicParams:
-    name: str
-    qos: QoSParams
+from .parameters import QoSParams
 
 
 def qos_profile_factory(qos: QoSParams) -> QoSProfile:

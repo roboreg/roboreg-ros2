@@ -43,7 +43,7 @@
           durability: TRANSIENT_LOCAL
 
     filters:
-      sync_accuracy: 1.0
+      sync_accuracy: 0.1
 
     segmentation:
       device: cuda
@@ -56,7 +56,6 @@
       root_link_name: ""
       end_link_name: ""
       collision_meshes: False
-      target_reduction: 0.0
 
     tf_broadcaster:
       parent_frame: world

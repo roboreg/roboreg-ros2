@@ -1,5 +1,4 @@
 import pathlib
-from abc import ABC
 from collections import OrderedDict
 from copy import deepcopy
 from typing import List
@@ -13,7 +12,7 @@ from roboreg_idl.srv import CollectData, Export
 from .collectables import Collectable
 
 
-class Server(ABC):
+class SynchronizedCollector:
     def __init__(self, node: Node) -> None:
         self._node = node
 
@@ -54,9 +53,8 @@ class Server(ABC):
     def subscribers(self) -> OrderedDict[str, Subscriber]:
         return self._subscribers
 
-    @subscribers.setter
-    def subscribers(self, subscribers: OrderedDict[str, Subscriber]) -> None:
-        self._subscribers = subscribers
+    def reset_subscribers(self) -> None:
+        self._subscribers = OrderedDict()
 
     def initialize(self, accuracy: float = 0.1) -> None:
         self._approx_time_sync: ApproximateTimeSynchronizer = (

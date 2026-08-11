@@ -18,7 +18,7 @@ setup(
     zip_safe=True,
     maintainer="mhubii",
     maintainer_email="m.huber_1994@hotmail.de",
-    description="TODO: Package description",
+    description="Implements roboreg_base using the roboreg Python library locally.",
     license="Apache-2.0",
     extras_require={
         "test": [
