@@ -7,6 +7,7 @@
   <maintainer email="m.huber_1994@hotmail.de">mhubii</maintainer>
   <license>Apache-2.0</license>
 
+  <exec_depend>python3-numpy</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>roboreg_base</exec_depend>
   <exec_depend>roboreg_idl</exec_depend>
