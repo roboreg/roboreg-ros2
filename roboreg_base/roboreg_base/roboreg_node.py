@@ -1,7 +1,6 @@
 import copy
 import pathlib
 from abc import ABC, abstractmethod
-from typing import List
 
 import cv_bridge
 import numpy as np
@@ -218,7 +217,7 @@ class RoboregNode(Node, ABC):
         )
 
     def _on_set_common_parameters_impl(
-        self, paramaters: List[Parameter]
+        self, paramaters: list[Parameter]
     ) -> SetParametersResult:
         result = SetParametersResult(successful=True)
         for parameter in paramaters:
@@ -232,7 +231,7 @@ class RoboregNode(Node, ABC):
                 continue
         return result
 
-    def _on_set_parameters(self, paramaters: List[Parameter]) -> SetParametersResult:
+    def _on_set_parameters(self, paramaters: list[Parameter]) -> SetParametersResult:
         result = self._on_set_common_parameters_impl(paramaters)
         if not result.successful:
             return result
@@ -250,7 +249,7 @@ class RoboregNode(Node, ABC):
 
     @abstractmethod
     def _on_set_extra_parameters_impl(
-        self, paramaters: List[Parameter]
+        self, paramaters: list[Parameter]
     ) -> SetParametersResult:
         raise NotImplementedError
 

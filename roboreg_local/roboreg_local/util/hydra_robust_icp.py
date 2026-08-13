@@ -1,5 +1,3 @@
-from typing import List
-
 import numpy as np
 from roboreg.core.robot import RobotData
 from roboreg.registration.point_cloud.config import (
@@ -18,9 +16,9 @@ def run_hydra_robust_icp_registration(
     request: RegHydraRobustICP.Request,
     robot_data: RobotData,
     intrinsics: np.ndarray,
-    joint_states: List[np.ndarray],
-    masks: List[np.ndarray],
-    depths: List[np.ndarray],
+    joint_states: list[np.ndarray],
+    masks: list[np.ndarray],
+    depths: list[np.ndarray],
 ) -> RegistrationResult:
     registration = HydraRobustICP(
         config=HydraRobustICPConfig(

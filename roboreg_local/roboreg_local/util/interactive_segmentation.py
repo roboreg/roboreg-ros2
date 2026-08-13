@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 import numpy as np
 import torch
@@ -37,7 +36,7 @@ class InteractiveSegmentation:
         )
         self._node.get_logger().info("Segmentation model instantiated.")
 
-    def segment(self, images: List[np.ndarray]) -> List[np.ndarray]:
+    def segment(self, images: list[np.ndarray]) -> list[np.ndarray]:
         segmentations = []
         for image in images:
             samples, labels = self._detector.detect(image)

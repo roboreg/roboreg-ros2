@@ -1,6 +1,6 @@
 import pathlib
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, Optional, Type, TypeVar, get_args
+from typing import Generic, TypeVar, get_args
 
 import cv2
 import cv_bridge
@@ -14,7 +14,7 @@ T = TypeVar("T")
 
 
 class Collectable(ABC, Generic[T]):
-    _collectable_map: Dict[Type[T], Type["Collectable"]] = {}
+    _collectable_map: dict[type[T], type["Collectable"]] = {}
 
     def __init__(self, msg: T):
         self._msg: T = msg
@@ -33,7 +33,7 @@ class Collectable(ABC, Generic[T]):
         return self._msg
 
     @classmethod
-    def from_message(cls, msg: T) -> Optional["Collectable[T]"]:
+    def from_message(cls, msg: T) -> "Collectable[T]" | None:
         msg_type = type(msg)
         collectable_cls = cls._collectable_map.get(msg_type)
         if collectable_cls:

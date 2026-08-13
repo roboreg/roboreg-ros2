@@ -1,7 +1,6 @@
 import pathlib
 from collections import OrderedDict
 from copy import deepcopy
-from typing import List
 
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.node import Node
@@ -18,7 +17,7 @@ class SynchronizedCollector:
 
         # data collection
         self._collectables: OrderedDict[str, Collectable] = None
-        self._collectables_history: List[OrderedDict[str, Collectable]] = []
+        self._collectables_history: list[OrderedDict[str, Collectable]] = []
 
         # subscribers
         self._subscribers: OrderedDict[str, Subscriber] = {}
@@ -42,7 +41,7 @@ class SynchronizedCollector:
         return self._collectables
 
     @property
-    def collectables_history(self) -> List[OrderedDict[str, Collectable]]:
+    def collectables_history(self) -> list[OrderedDict[str, Collectable]]:
         return self._collectables_history
 
     @property
@@ -64,7 +63,7 @@ class SynchronizedCollector:
         )
         self._approx_time_sync.registerCallback(self._on_sync)
 
-    def _on_sync(self, *msgs: List) -> None:
+    def _on_sync(self, *msgs: list) -> None:
         self._collectables = OrderedDict(
             {
                 name: Collectable.from_message(msg)

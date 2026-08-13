@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 from message_filters import Subscriber
 from rcl_interfaces.msg import Parameter, SetParametersResult
@@ -233,7 +232,7 @@ class StereoDepthNode(RoboregNode):
         )
 
     def _on_set_extra_parameters_impl(
-        self, paramaters: List[Parameter]
+        self, paramaters: list[Parameter]
     ) -> SetParametersResult:
         result = SetParametersResult(successful=True)
         for parameter in paramaters:
