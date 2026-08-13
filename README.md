@@ -12,10 +12,10 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
-- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.6.4`:
+- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.6.7`:
 
 ```shell
-pip3 install roboreg==0.6.4
+pip3 install roboreg==0.6.7
 ```
 
 - Build this `roboreg` ROS 2 integration

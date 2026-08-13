@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from rclpy.node import Node
-from roboreg.detector import OpenCVDetector
+from roboreg.annotator import OpenCVAnnotator, annotations_to_arrays
 from roboreg.segmentor import Sam2Segmentor
 
 
@@ -20,10 +20,10 @@ class InteractiveSegmentation:
         self._node = node
         self._declare_segmentation_parameters()
         self._params = self._get_segmentation_params()
-        self._detector = OpenCVDetector(
-            n_positive_samples=self._params.n_positive_samples,
-            n_negative_samples=self._params.n_negative_samples,
-            window_name="Interactive segmentation",
+        self._annotator = OpenCVAnnotator(
+            n_positive=self._params.n_positive_samples,
+            n_negative=self._params.n_negative_samples,
+            window_name="Annotate: left click for positive, CTRL + left click for negative samples",
         )
         self._node.get_logger().info(
             f"Instantiating segmentation model on '{self._params.device}' device. "
@@ -31,7 +31,6 @@ class InteractiveSegmentation:
         )
         self._segmentor = Sam2Segmentor(
             model_id=self._params.model_id,
-            pth=self._params.pth,
             device=self._params.device,
         )
         self._node.get_logger().info("Segmentation model instantiated.")
@@ -39,14 +38,21 @@ class InteractiveSegmentation:
     def segment(self, images: list[np.ndarray]) -> list[np.ndarray]:
         segmentations = []
         for image in images:
-            samples, labels = self._detector.detect(image)
+            annotations = self._annotator.annotate(image)
+            self._annotator.clear()
+            samples, labels = annotations_to_arrays(annotations)
             probability = self._segmentor(
                 image, np.asarray(samples), np.asarray(labels)
             )
             segmentations.append(
-                np.where(probability > self._params.pth, 255, 0).astype(np.uint8)
+                np.where(
+                    self._segmentor.threshold(
+                        probability=probability, pth=self._params.pth
+                    ),
+                    255,
+                    0,
+                ).astype(np.uint8)
             )
-            self._detector.clear()
         return segmentations
 
     def _declare_segmentation_parameters(self) -> None:

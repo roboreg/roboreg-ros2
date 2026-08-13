@@ -1,5 +1,5 @@
 import numpy as np
-from roboreg.io import load_robot_data_from_urdf_string
+from roboreg.io import load_robot_data_from_ros_robot_description
 
 from roboreg_base.stereo_depth_node import StereoDepthNode as StereoDepthNodeBase
 from roboreg_idl.srv import RegHydraRobustICP
@@ -22,7 +22,7 @@ class StereoDepthNode(StereoDepthNodeBase):
     ) -> RegHydraRobustICP.Response:
         res.success = True
         try:
-            robot_data = load_robot_data_from_urdf_string(
+            robot_data = load_robot_data_from_ros_robot_description(
                 urdf=self._robot_description,
                 root_link_name=self._robot_data_params.root_link_name,
                 end_link_name=self._robot_data_params.end_link_name,
