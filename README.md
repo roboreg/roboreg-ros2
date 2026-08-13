@@ -40,8 +40,7 @@ This node performs eye-to-hand calibration from RGB images and corresponding dep
 To run, simply do
 
 ```shell
-ros2 launch roboreg_local server.launch.py \
-    mode:=monocular_depth
+ros2 launch roboreg_local monocular_server.launch.py
 ```
 
 Sample configurations are provided in [monocular_depth.yaml](roboreg_local/config/monocular_depth.yaml). Please note that compressed image / depth topics are also supported.

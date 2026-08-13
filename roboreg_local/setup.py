@@ -27,8 +27,8 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "monocular_depth = scripts.monocular_depth_reg:main",
-            "stereo_depth = scripts.stereo_depth_reg:main",
+            "roboreg_monocular = scripts.roboreg_monocular:main",
+            "roboreg_stereo = scripts.roboreg_stereo:main",
         ],
     },
 )

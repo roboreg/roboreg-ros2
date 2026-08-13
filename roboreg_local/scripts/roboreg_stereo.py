@@ -6,7 +6,7 @@ from roboreg_local.stereo_depth_node import StereoDepthNode
 def main():
     rclpy.init(args=None)
     try:
-        reg = StereoDepthNode(node_name="roboreg")
+        reg = StereoDepthNode(node_name="roboreg_stereo_local")
         rclpy.spin(reg)
     except KeyboardInterrupt:
         pass

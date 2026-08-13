@@ -9,12 +9,6 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
         [
             DeclareLaunchArgument(
-                "mode",
-                default_value="monocular_depth",
-                choices=["monocular_depth", "stereo_depth"],
-                description="Mode to launch.",
-            ),
-            DeclareLaunchArgument(
                 "namespace",
                 default_value="",
                 description="Namespace for the roboreg node.",
@@ -36,8 +30,8 @@ def generate_launch_description() -> LaunchDescription:
             ),
             Node(
                 package="roboreg_local",
-                executable=LaunchConfiguration("mode"),
-                name="roboreg",
+                executable="roboreg_monocular",
+                name="roboreg_monocular_local",
                 output="screen",
                 parameters=[
                     PathJoinSubstitution(

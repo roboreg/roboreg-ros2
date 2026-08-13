@@ -11,7 +11,7 @@ from .util.robot_data import robot_description_to_robot_data
 
 
 class MonocularDepthNode(MonocularDepthNodeBase):
-    def __init__(self, node_name: str = "roboreg") -> None:
+    def __init__(self, node_name: str = "roboreg_monocular_local") -> None:
         super().__init__(node_name)
 
         self._hydra_icp_srv = self.create_service(

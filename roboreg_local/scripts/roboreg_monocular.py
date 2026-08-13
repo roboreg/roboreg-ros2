@@ -6,7 +6,7 @@ from roboreg_local.monocular_depth_node import MonocularDepthNode
 def main():
     rclpy.init(args=None)
     try:
-        reg = MonocularDepthNode(node_name="roboreg")
+        reg = MonocularDepthNode(node_name="roboreg_monocular_local")
         rclpy.spin(reg)
     except KeyboardInterrupt:
         pass
