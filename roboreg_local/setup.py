@@ -27,8 +27,8 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "roboreg_monocular = scripts.roboreg_monocular:main",
-            "roboreg_stereo = scripts.roboreg_stereo:main",
+            "roboreg_monocular = roboreg_local.cli.roboreg_monocular:main",
+            "roboreg_stereo = roboreg_local.cli.roboreg_stereo:main",
         ],
     },
 )
