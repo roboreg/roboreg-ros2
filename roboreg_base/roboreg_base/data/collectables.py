@@ -33,7 +33,7 @@ class Collectable(ABC, Generic[T]):
         return self._msg
 
     @classmethod
-    def from_message(cls, msg: T) -> "Collectable[T]" | None:
+    def from_message(cls, msg: T) -> "Collectable[T]":
         msg_type = type(msg)
         collectable_cls = cls._collectable_map.get(msg_type)
         if collectable_cls:
