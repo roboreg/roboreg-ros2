@@ -1,11 +1,11 @@
 import numpy as np
+from roboreg.io import load_robot_data_from_urdf_string
 
 from roboreg_base.stereo_depth_node import StereoDepthNode as StereoDepthNodeBase
 from roboreg_idl.srv import RegHydraRobustICP
 
 from .util.hydra_robust_icp import run_hydra_robust_icp_registration
 from .util.interactive_segmentation import InteractiveSegmentation
-from .util.robot_data import robot_description_to_robot_data
 
 
 class StereoDepthNode(StereoDepthNodeBase):
@@ -22,10 +22,11 @@ class StereoDepthNode(StereoDepthNodeBase):
     ) -> RegHydraRobustICP.Response:
         res.success = True
         try:
-            robot_data = robot_description_to_robot_data(
-                robot_description=self._robot_description,
-                params=self._robot_data_params,
-                logger=self.get_logger(),
+            robot_data = load_robot_data_from_urdf_string(
+                urdf=self._robot_description,
+                root_link_name=self._robot_data_params.root_link_name,
+                end_link_name=self._robot_data_params.end_link_name,
+                collision=self._robot_data_params.collision_meshes,
             )
             images = [
                 collectables["camera.left.image"].to_numpy()
