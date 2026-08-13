@@ -1,4 +1,4 @@
-/**/roboreg_stereo_local:
+/**/roboreg_stereo_cloud:
   ros__parameters:
     topics:
       left_image:
@@ -45,12 +45,9 @@
     filters:
       sync_accuracy: 0.1
 
-    segmentation:
-      device: cuda
+    annotation:
       n_positive_samples: 5
       n_negative_samples: 5
-      model_id: facebook/sam2-hiera-large
-      pth: 0.5
 
     robot_data:
       root_link_name: ""

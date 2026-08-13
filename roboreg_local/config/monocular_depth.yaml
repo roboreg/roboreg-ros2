@@ -1,4 +1,4 @@
-/**/roboreg:
+/**/roboreg_monocular_local:
   ros__parameters:
     topics:
       image:

@@ -1,23 +1,13 @@
-/**/roboreg_stereo_local:
+/**/roboreg_monocular_cloud:
   ros__parameters:
     topics:
-      left_image:
-        name: /camera/left/image_rect_color
+      image:
+        name: /camera/image_rect_color
         qos:
           reliability: BEST_EFFORT
           durability: VOLATILE
         camera_info:
-          name: /camera/left/camera_info
-          qos:
-            reliability: BEST_EFFORT
-            durability: VOLATILE
-      right_image:
-        name: /camera/right/image_rect_color
-        qos:
-          reliability: BEST_EFFORT
-          durability: VOLATILE
-        camera_info:
-          name: /camera/right/camera_info
+          name: /camera/camera_info
           qos:
             reliability: BEST_EFFORT
             durability: VOLATILE
@@ -45,12 +35,9 @@
     filters:
       sync_accuracy: 0.1
 
-    segmentation:
-      device: cuda
+    annotation:
       n_positive_samples: 5
       n_negative_samples: 5
-      model_id: facebook/sam2-hiera-large
-      pth: 0.5
 
     robot_data:
       root_link_name: ""
