@@ -1,0 +1,65 @@
+/**/roboreg_stereo_local:
+  ros__parameters:
+    topics:
+      left_image:
+        name: /camera/left/image_rect_color
+        qos:
+          reliability: BEST_EFFORT
+          durability: VOLATILE
+        camera_info:
+          name: /camera/left/camera_info
+          qos:
+            reliability: BEST_EFFORT
+            durability: VOLATILE
+      right_image:
+        name: /camera/right/image_rect_color
+        qos:
+          reliability: BEST_EFFORT
+          durability: VOLATILE
+        camera_info:
+          name: /camera/right/camera_info
+          qos:
+            reliability: BEST_EFFORT
+            durability: VOLATILE
+      depth:
+        name: /camera/depth/registered
+        qos:
+          reliability: BEST_EFFORT
+          durability: VOLATILE
+        camera_info:
+          name: /camera/depth/registered/camera_info
+          qos:
+            reliability: BEST_EFFORT
+            durability: VOLATILE
+      joint_state:
+        name: /joint_states
+        qos:
+          reliability: BEST_EFFORT
+          durability: VOLATILE
+      robot_description:
+        name: /robot_description
+        qos:
+          reliability: RELIABLE
+          durability: TRANSIENT_LOCAL
+
+    filters:
+      sync_accuracy: 0.1
+
+    annotation:
+      n_positive: 3
+      n_negative: 0
+
+    segmentation:
+      device: cuda
+      model_id: facebook/sam2-hiera-large
+      pth: 0.5
+
+    robot_data:
+      root_link_name: ""
+      end_link_name: ""
+      collision_meshes: False
+
+    tf_broadcaster:
+      parent_frame: world
+      child_frame: camera_frame
+      target_child_frame: camera_link
