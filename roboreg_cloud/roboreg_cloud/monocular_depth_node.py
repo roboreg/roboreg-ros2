@@ -76,9 +76,10 @@ class MonocularDepthNode(MonocularDepthNodeBase):
                     "z_min": req.z_min,
                 },
             )
-            extrinsics = np.loadtxt(io.BytesIO(response), delimiter=",")
+            extrinsics = np.loadtxt(io.BytesIO(response.content), delimiter=",")
             if np.isnan(extrinsics).any():
                 raise ValueError("Registration failed: extrinsics contain NaN values.")
+            res.message = f"Registration completed successfully with status code '{response.status_code}'."
             self._extrinsics = extrinsics
         except Exception as e:
             res.success = False

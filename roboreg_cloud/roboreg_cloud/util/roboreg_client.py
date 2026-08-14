@@ -20,15 +20,22 @@ class RoboregCloudClient:
         self._params = self._get_parameters()
         self._session = requests.Session()
 
-    def run_hydra_robust_icp(self, archive: bytes, config: dict) -> bytes:
+    def run_hydra_robust_icp(self, archive: bytes, config: dict) -> requests.Response:
+        url = f"{self._params.base_url}/localize/hydra"
+        self._node.get_logger().info(
+            f"Requesting registration from {url}, this may take a while..."
+        )
         response = self._session.post(
-            f"{self._params.base_url}/localize/hydra",
+            url,
             files={"archive": ("archive.zip", archive, "application/zip")},
             data={"config": json.dumps(config)},
             timeout=self._params.timeout,
         )
         response.raise_for_status()
-        return response.content
+        self._node.get_logger().info(
+            f"Registration request completed with status code '{response.status_code}'."
+        )
+        return response
 
     def _declare_parameters(self) -> None:
         self._node.declare_parameter("cloud_client.base_url", "http://localhost:8000")
