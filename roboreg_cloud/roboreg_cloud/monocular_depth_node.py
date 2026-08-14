@@ -55,10 +55,7 @@ class MonocularDepthNode(MonocularDepthNodeBase):
                     collectables["camera.depth"].to_numpy()
                     for collectables in self._data_collector.collectables_history
                 ],
-                images=[
-                    collectables["camera.image"].to_numpy()
-                    for collectables in self._data_collector.collectables_history
-                ],
+                images=images,
                 image_annotations=annotations,
             )
             response = self._roboreg_client.run_hydra_robust_icp(

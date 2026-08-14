@@ -1,6 +1,7 @@
 import csv
 import io
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, NamedTuple
 
 import cv2
@@ -31,12 +32,17 @@ def annotations_to_csv(annotations: List[Annotation]) -> str:
 
 
 class Annotator(ABC):
-    def __init__(self, node: Node, n_positive: int, n_negative: int) -> None:
+    @dataclass(frozen=True)
+    class _Params:
+        n_positive: int = 3
+        n_negative: int = 3
+
+    def __init__(self, node: Node) -> None:
         super().__init__()
         self._annotations: List[Annotation] = []
         self._node = node
-        self._n_positive = n_positive
-        self._n_negative = n_negative
+        self._declare_annotation_parameters()
+        self._params = self._get_annotation_params()
 
     def clear(self) -> None:
         self._annotations = []
@@ -57,41 +63,53 @@ class Annotator(ABC):
     def negative_annotations(self) -> List[Annotation]:
         return [annotation for annotation in self._annotations if annotation.label == 0]
 
+    def _declare_annotation_parameters(self) -> None:
+        self._node.declare_parameter("annotation.n_positive", 3)
+        self._node.declare_parameter("annotation.n_negative", 3)
+
+    def _get_annotation_params(self) -> _Params:
+        return self._Params(
+            n_positive=self._node.get_parameter("annotation.n_positive")
+            .get_parameter_value()
+            .integer_value,
+            n_negative=self._node.get_parameter("annotation.n_negative")
+            .get_parameter_value()
+            .integer_value,
+        )
+
 
 class OpenCVAnnotator(Annotator):
     def __init__(
         self,
         node: Node,
-        n_positive: int = 3,
-        n_negative: int = 3,
         window_name="Annotate: left click for positive, CTRL + left click for negative samples",
     ) -> None:
-        super().__init__(node=node, n_positive=n_positive, n_negative=n_negative)
+        super().__init__(node=node)
         self._window_name = window_name
 
     def _on_mouse(self, event, x, y, flags, param):
         if (
             event == cv2.EVENT_LBUTTONDOWN and flags & cv2.EVENT_FLAG_CTRLKEY
         ):  # bitwise and for flags: https://stackoverflow.com/questions/32210066/mouse-callback-event-flags-in-python-opencv-osx
-            if len(self.negative_annotations) >= self._n_negative:
+            if len(self.negative_annotations) >= self._params.n_negative:
                 self._node.get_logger().info(
-                    f"Already added {len(self.negative_annotations)} of {self._n_negative}  negative samples."
+                    f"Already added {len(self.negative_annotations)} of {self._params.n_negative}  negative samples."
                 )
                 return
             self._annotations.append(Annotation(x=x, y=y, label=0))
             self._node.get_logger().info(
-                f"Negative samples: {len(self.negative_annotations)} of {self._n_negative}. Coordinates {x}, {y}."
+                f"Negative samples: {len(self.negative_annotations)} of {self._params.n_negative}. Coordinates {x}, {y}."
             )
             return
         if event == cv2.EVENT_LBUTTONDOWN:
-            if len(self.positive_annotations) >= self._n_positive:
+            if len(self.positive_annotations) >= self._params.n_positive:
                 self._node.get_logger().info(
-                    f"Already added {len(self.positive_annotations)} of {self._n_positive} positive samples. Use CTRL + Left Click to add negative samples."
+                    f"Already added {len(self.positive_annotations)} of {self._params.n_positive} positive samples. Use CTRL + Left Click to add negative samples."
                 )
                 return
             self._annotations.append(Annotation(x=x, y=y, label=1))
             self._node.get_logger().info(
-                f"Positive samples: {len(self.positive_annotations)} of {self._n_positive}. Coordinates: {x}, {y}."
+                f"Positive samples: {len(self.positive_annotations)} of {self._params.n_positive}. Coordinates: {x}, {y}."
             )
             return
 
@@ -100,8 +118,8 @@ class OpenCVAnnotator(Annotator):
         cv2.setMouseCallback(self._window_name, self._on_mouse)
         img_cpy = img.copy()
         while (
-            len(self.positive_annotations) < self._n_positive
-            or len(self.negative_annotations) < self._n_negative
+            len(self.positive_annotations) < self._params.n_positive
+            or len(self.negative_annotations) < self._params.n_negative
         ):
             try:
                 cv2.imshow(self._window_name, img_cpy)

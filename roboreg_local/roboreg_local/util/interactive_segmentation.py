@@ -10,8 +10,8 @@ from roboreg.segmentor import Sam2Segmentor
 class InteractiveSegmentation:
     @dataclass
     class _AnnotationParams:
-        n_positive: int
-        n_negative: int
+        n_positive: int = 3
+        n_negative: int = 3
 
     @dataclass
     class _SegmentationParams:
@@ -64,8 +64,8 @@ class InteractiveSegmentation:
         self._node.declare_parameters(
             namespace="",
             parameters=[
-                ("annotation.n_positive", 5),
-                ("annotation.n_negative", 5),
+                ("annotation.n_positive", 3),
+                ("annotation.n_negative", 3),
             ],
         )
 
