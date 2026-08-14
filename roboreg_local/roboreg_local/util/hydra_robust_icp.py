@@ -12,7 +12,7 @@ from roboreg.registration.result import RegistrationResult
 from roboreg_idl.srv import RegHydraRobustICP
 
 
-def run_hydra_robust_icp_registration(
+def run_hydra_robust_icp(
     request: RegHydraRobustICP.Request,
     robot_data: RobotData,
     intrinsics: np.ndarray,

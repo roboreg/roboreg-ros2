@@ -45,10 +45,12 @@
     filters:
       sync_accuracy: 0.1
 
+    annotation:
+      n_positive: 5
+      n_negative: 5
+
     segmentation:
       device: cuda
-      n_positive_samples: 5
-      n_negative_samples: 5
       model_id: facebook/sam2-hiera-large
       pth: 0.5
 

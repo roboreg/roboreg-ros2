@@ -36,8 +36,12 @@
       sync_accuracy: 0.1
 
     annotation:
-      n_positive_samples: 5
-      n_negative_samples: 5
+      n_positive: 5
+      n_negative: 5
+
+    cloud_client:
+      base_url: http://localhost:8000
+      timeout: 120.0
 
     robot_data:
       root_link_name: ""

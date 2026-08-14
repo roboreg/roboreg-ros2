@@ -6,7 +6,7 @@ from roboreg_base.monocular_depth_node import (
 )
 from roboreg_idl.srv import RegHydraRobustICP
 
-from .util.hydra_robust_icp import run_hydra_robust_icp_registration
+from .util.hydra_robust_icp import run_hydra_robust_icp
 from .util.interactive_segmentation import InteractiveSegmentation
 
 
@@ -46,7 +46,7 @@ class MonocularDepthNode(MonocularDepthNodeBase):
                 collectables["joint_states"].to_numpy()
                 for collectables in self._data_collector.collectables_history
             ]
-            result = run_hydra_robust_icp_registration(
+            result = run_hydra_robust_icp(
                 request=req,
                 robot_data=robot_data,
                 intrinsics=intrinsics,
