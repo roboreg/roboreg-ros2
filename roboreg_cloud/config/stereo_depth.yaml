@@ -2,42 +2,42 @@
   ros__parameters:
     topics:
       left_image:
-        name: /zed/zed_node/left/image_rect_color/compressed
+        name: /camera/left/image_rect_color
         qos:
           reliability: BEST_EFFORT
           durability: VOLATILE
         camera_info:
-          name: /zed/zed_node/left/camera_info
+          name: /camera/left/camera_info
           qos:
             reliability: BEST_EFFORT
             durability: VOLATILE
       right_image:
-        name: /zed/zed_node/right/image_rect_color/compressed
+        name: /camera/right/image_rect_color
         qos:
           reliability: BEST_EFFORT
           durability: VOLATILE
         camera_info:
-          name: /zed/zed_node/right/camera_info
+          name: /camera/right/camera_info
           qos:
             reliability: BEST_EFFORT
             durability: VOLATILE
       depth:
-        name: /zed/zed_node/depth/depth_registered/compressedDepth
+        name: /camera/depth/registered
         qos:
           reliability: BEST_EFFORT
           durability: VOLATILE
         camera_info:
-          name: /zed/zed_node/depth/camera_info
+          name: /camera/depth/registered/camera_info
           qos:
             reliability: BEST_EFFORT
             durability: VOLATILE
       joint_state:
-        name: /lbr/joint_states
+        name: /joint_states
         qos:
           reliability: BEST_EFFORT
           durability: VOLATILE
       robot_description:
-        name: /lbr/robot_description
+        name: /robot_description
         qos:
           reliability: RELIABLE
           durability: TRANSIENT_LOCAL
@@ -60,5 +60,5 @@
 
     tf_broadcaster:
       parent_frame: world
-      child_frame: zed_left_camera_frame
-      target_child_frame: zed_camera_link
+      child_frame: camera_frame
+      target_child_frame: camera_link
