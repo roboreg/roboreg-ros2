@@ -2,7 +2,6 @@
 [![License: Apache License 2.0](https://img.shields.io/github/license/roboreg/roboreg-ros2)](https://github.com/roboreg/roboreg-ros2?tab=Apache-2.0-1-ov-file)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Jazzy](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_jazzy.yaml/badge.svg?branch=main)](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_jazzy.yaml)
-[![Lyrical](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_lyrical.yaml/badge.svg?branch=main)](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_lyrical.yaml)
 [![Rolling](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_rolling.yaml/badge.svg?branch=main)](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_rolling.yaml)
 
 ROS 2 integration for [roboreg](https://github.com/roboreg/roboreg).
