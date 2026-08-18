@@ -1,11 +1,10 @@
 # roboreg - ROS 2
-[![License: Apache License 2.0](https://img.shields.io/github/license/lbr-stack/roboreg-ros2)](https://github.com/lbr-stack/roboreg-ros2?tab=Apache-2.0-1-ov-file)
+[![License: Apache License 2.0](https://img.shields.io/github/license/roboreg/roboreg-ros2)](https://github.com/roboreg/roboreg-ros2?tab=Apache-2.0-1-ov-file)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Jazzy](https://github.com/lbr-stack/roboreg-ros2/actions/workflows/ros2_ci_jazzy.yaml/badge.svg?branch=main)](https://github.com/lbr-stack/roboreg-ros2/actions/workflows/ros2_ci_jazzy.yaml)
-[![Lyrical](https://github.com/lbr-stack/roboreg-ros2/actions/workflows/ros2_ci_lyrical.yaml/badge.svg?branch=main)](https://github.com/lbr-stack/roboreg-ros2/actions/workflows/ros2_ci_lyrical.yaml)
-[![Rolling](https://github.com/lbr-stack/roboreg-ros2/actions/workflows/ros2_ci_rolling.yaml/badge.svg?branch=main)](https://github.com/lbr-stack/roboreg-ros2/actions/workflows/ros2_ci_rolling.yaml)
+[![Jazzy](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_jazzy.yaml/badge.svg?branch=main)](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_jazzy.yaml)
+[![Rolling](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_rolling.yaml/badge.svg?branch=main)](https://github.com/roboreg/roboreg-ros2/actions/workflows/ros2_ci_rolling.yaml)
 
-ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
+ROS 2 integration for [roboreg](https://github.com/roboreg/roboreg).
 
 ## Table of Contents
 * [Installation](#installation)
@@ -14,7 +13,7 @@ ROS 2 integration for [roboreg](https://github.com/lbr-stack/roboreg).
     * [Static TF Broadcaster](#static-tf-broadcaster)
 
 ## Installation
-- Install [roboreg](https://github.com/lbr-stack/roboreg?tab=readme-ov-file#installation) version `0.6.7`:
+- Install [roboreg](https://github.com/roboreg/roboreg?tab=readme-ov-file#installation) version `0.6.7`:
 
 ```shell
 pip3 install roboreg==0.6.7
@@ -23,8 +22,8 @@ pip3 install roboreg==0.6.7
 - Build this `roboreg` ROS 2 integration
 
 ```shell
-mkdir -p lbr-stack/src && cd lbr-stack
-git clone https://github.com/lbr-stack/roboreg-ros2.git src/roboreg-ros2
+mkdir -p roboreg-ros2/src && cd roboreg-ros2
+git clone https://github.com/roboreg/roboreg-ros2.git src/roboreg-ros2
 rosdep install --from-paths src -r -i -y
 colcon build --symlink-install
 ```
