@@ -16,7 +16,11 @@ setup(
     maintainer_email="m.huber_1994@hotmail.de",
     description="Data collection utilities for the ROS 2 roboreg integration..",
     license="Apache-2.0",
-    tests_require=["pytest"],
+    extras_require={
+        "test": [
+            "pytest",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "broadcaster = scripts.broadcaster_node:main",

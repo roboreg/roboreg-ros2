@@ -14,11 +14,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    container:
+      image: rostooling/setup-ros-docker:ubuntu-resolute-latest # other tags: https://hub.docker.com/r/rostooling/setup-ros-docker/tags
     steps:
-      - name: Setup ROS
-        uses: ros-tooling/setup-ros@v0.7
-        with:
-          required-ros-distributions: rolling
       - name: Colcon Build & Test
         uses: ros-tooling/action-ros-ci@v0.4
         with:

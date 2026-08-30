@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.22)
 project(roboreg_rviz)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -22,13 +22,13 @@ find_package(pluginlib REQUIRED)
 set(CMAKE_AUTOMOC ON) # for Qt MOC
 
 set(roboreg_rviz_dependencies
-  rclcpp
-  rviz_common
-  roboreg_idl
-  sensor_msgs
-  std_msgs
-  std_srvs
-  pluginlib
+  rclcpp::rclcpp
+  rviz_common::rviz_common
+  roboreg_idl::roboreg_idl
+  sensor_msgs::sensor_msgs
+  std_msgs::std_msgs
+  std_srvs::std_srvs
+  pluginlib::pluginlib
 )
 
 add_library(
@@ -49,7 +49,7 @@ target_include_directories(
   $<INSTALL_INTERFACE:include>
 )
 
-ament_target_dependencies(
+target_link_libraries(
   roboreg_rviz
   ${roboreg_rviz_dependencies}
 )
