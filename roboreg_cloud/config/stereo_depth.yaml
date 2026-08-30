@@ -1,46 +1,14 @@
 /**/roboreg_stereo_cloud:
   ros__parameters:
     topics:
-      left_image:
-        name: /camera/left/image_rect_color
-        qos:
-          reliability: BEST_EFFORT
-          durability: VOLATILE
-        camera_info:
-          name: /camera/left/camera_info
-          qos:
-            reliability: BEST_EFFORT
-            durability: VOLATILE
-      right_image:
-        name: /camera/right/image_rect_color
-        qos:
-          reliability: BEST_EFFORT
-          durability: VOLATILE
-        camera_info:
-          name: /camera/right/camera_info
-          qos:
-            reliability: BEST_EFFORT
-            durability: VOLATILE
-      depth:
-        name: /camera/depth/registered
-        qos:
-          reliability: BEST_EFFORT
-          durability: VOLATILE
-        camera_info:
-          name: /camera/depth/registered/camera_info
-          qos:
-            reliability: BEST_EFFORT
-            durability: VOLATILE
-      joint_state:
-        name: /joint_states
-        qos:
-          reliability: BEST_EFFORT
-          durability: VOLATILE
-      robot_description:
-        name: /robot_description
-        qos:
-          reliability: RELIABLE
-          durability: TRANSIENT_LOCAL
+      left_image: /camera/left/image_rect_color
+      left_camera_info: /camera/left/camera_info
+      right_image: /camera/right/image_rect_color
+      right_camera_info: /camera/right/camera_info
+      depth: /camera/depth/registered
+      depth_camera_info: /camera/depth/registered/camera_info
+      joint_state: /joint_states
+      robot_description: /robot_description
 
     filters:
       sync_accuracy: 0.1

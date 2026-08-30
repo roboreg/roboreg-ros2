@@ -15,12 +15,10 @@ from .broadcaster import StaticTFBroadcaster
 from .data.synchronized_collector import SynchronizedCollector
 from .parameters import (
     FilterParams,
-    QoSParams,
     RobotDataParams,
     TFBroadcasterParams,
-    TopicParams,
 )
-from .qos_profile_factory import qos_profile_factory
+from .qos_profiles import ROBOT_DESCRIPTION_QOS
 
 
 class RoboregNode(Node, ABC):
@@ -64,12 +62,11 @@ class RoboregNode(Node, ABC):
     def _create_robot_description_sub(self) -> None:
         if self._robot_description_sub is not None:
             self.destroy_subscription(self._robot_description_sub)
-        qos_profile = qos_profile_factory(self._robot_description_topic.qos)
         self._robot_description_sub = self.create_subscription(
             String,
-            self._robot_description_topic.name,
+            self._robot_description_topic,
             self._on_robot_description,
-            qos_profile,
+            ROBOT_DESCRIPTION_QOS,
         )
 
     def _on_tf_broadcast(self, _, res: Trigger.Response) -> Trigger.Response:
@@ -144,9 +141,7 @@ class RoboregNode(Node, ABC):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ("topics.robot_description.name", "/robot_description"),
-                ("topics.robot_description.qos.reliability", "RELIABLE"),
-                ("topics.robot_description.qos.durability", "TRANSIENT_LOCAL"),
+                ("topics.robot_description", "/robot_description"),
             ],
         )
         self.declare_parameters(
@@ -173,20 +168,10 @@ class RoboregNode(Node, ABC):
         )
 
     def _get_common_parameters(self) -> None:
-        self._robot_description_topic = TopicParams(
-            name=self.get_parameter("topics.robot_description.name")
+        self._robot_description_topic = (
+            self.get_parameter("topics.robot_description")
             .get_parameter_value()
-            .string_value,
-            qos=QoSParams(
-                reliability=self.get_parameter(
-                    "topics.robot_description.qos.reliability"
-                )
-                .get_parameter_value()
-                .string_value,
-                durability=self.get_parameter("topics.robot_description.qos.durability")
-                .get_parameter_value()
-                .string_value,
-            ),
+            .string_value
         )
         self._filter_params = FilterParams(
             sync_accuracy=self.get_parameter("filters.sync_accuracy")
@@ -221,11 +206,11 @@ class RoboregNode(Node, ABC):
     ) -> SetParametersResult:
         result = SetParametersResult(successful=True)
         for parameter in paramaters:
-            if parameter.name == "topics.robot_description.name":
+            if parameter.name == "topics.robot_description":
                 self.get_logger().info(
                     f"Setting robot description topic to {parameter.value}"
                 )
-                self._robot_description_topic.name = parameter.value
+                self._robot_description_topic = parameter.value
                 self._create_robot_description_sub()
             else:
                 continue

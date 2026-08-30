@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -18,12 +18,6 @@ class RobotDataParams:
 
 
 @dataclass
-class QoSParams:
-    reliability: str = "BEST_EFFORT"
-    durability: str = "VOLATILE"
-
-
-@dataclass
 class TFBroadcasterParams:
     parent_frame: str
     child_frame: str
@@ -36,13 +30,3 @@ class TFBroadcasterParams:
             raise ValueError("child_frame must not be empty.")
         if not self.target_child_frame:
             raise ValueError("target_child_frame must not be empty.")
-
-
-@dataclass
-class TopicParams:
-    name: str
-    qos: QoSParams = field(default_factory=QoSParams)
-
-    def __post_init__(self):
-        if not self.name:
-            raise ValueError("Topic name must not be empty.")
