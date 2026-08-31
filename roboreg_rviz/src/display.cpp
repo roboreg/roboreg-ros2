@@ -57,7 +57,7 @@ void Display::updateRobotDescriptionTopic() {
   }
   auto topic = robot_description_topic_property_->getStdString();
   RCLCPP_INFO(node_ptr_->get_logger(), "Updating robot description topic to: %s", topic.c_str());
-  parameters_client_->set_parameters({rclcpp::Parameter("topics.robot_description.name", topic)});
+  parameters_client_->set_parameters({rclcpp::Parameter("topics.robot_description", topic)});
 }
 
 void Display::updateJointStateTopic() {
@@ -70,7 +70,7 @@ void Display::updateJointStateTopic() {
   }
   auto topic = joint_state_topic_property_->getStdString();
   RCLCPP_INFO(node_ptr_->get_logger(), "Updating joint state topic to: %s", topic.c_str());
-  parameters_client_->set_parameters({rclcpp::Parameter("topics.joint_state.name", topic)});
+  parameters_client_->set_parameters({rclcpp::Parameter("topics.joint_state", topic)});
 }
 
 void Display::updateRoboregNode() {
