@@ -1,4 +1,5 @@
 import importlib.util
+from pathlib import Path
 import sys
 import types
 import uuid
@@ -108,7 +109,12 @@ def _load_interactive_segmentation_module(monkeypatch, cuda_available):
     monkeypatch.setitem(sys.modules, "roboreg.segmentor", segmentor_module)
 
     module_name = f"interactive_segmentation_test_{uuid.uuid4().hex}"
-    module_path = "/home/runner/work/roboreg-ros2/roboreg-ros2/roboreg_local/roboreg_local/util/interactive_segmentation.py"
+    module_path = (
+        Path(__file__).resolve().parents[1]
+        / "roboreg_local"
+        / "util"
+        / "interactive_segmentation.py"
+    )
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, module_name, module)
