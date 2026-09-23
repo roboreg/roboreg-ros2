@@ -25,6 +25,9 @@ class InteractiveSegmentation:
         self._declare_segmentation_parameters()
         self._annotation_params = self._get_annotation_params()
         self._segmentation_params = self._get_segmentation_params()
+        self._segmentation_params.device = self._resolve_segmentation_device(
+            self._segmentation_params.device
+        )
         self._annotator = OpenCVAnnotator(
             n_positive=self._annotation_params.n_positive,
             n_negative=self._annotation_params.n_negative,
@@ -101,3 +104,11 @@ class InteractiveSegmentation:
             .get_parameter_value()
             .double_value,
         )
+
+    def _resolve_segmentation_device(self, device: str) -> str:
+        if device.lower().startswith("cuda") and not torch.cuda.is_available():
+            self._node.get_logger().warning(
+                f"CUDA is not available. Falling back to 'cpu' instead of requested '{device}' device."
+            )
+            return "cpu"
+        return device
